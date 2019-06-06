@@ -22,7 +22,7 @@ SCR_ATTR = {
 
 RECT_LOOKUP = {}
 SURFACE_LOOKUP = {}
-
+#just a comment
 
 class CardWIDGET(pygame.sprite.Sprite):
     def __init__(self, card, rotation=0):
