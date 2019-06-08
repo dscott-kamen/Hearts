@@ -8,48 +8,81 @@ from resource import *
 class Event():
     def __init__(self):
         self.name = 'Generic Name'
- 
+
 class QuitEvent(Event):
     def __init__(self):
+        Event.__init__(self)
         self.name = "Program Quit Event"
  
 class TickEvent(Event):
     def __init__(self):
+        Event.__init__(self)
         self.name = "CPU Tick Event"
  
 class UserInputErrorEvent(Event):
     def __init__(self, message):
+        Event.__init__(self)
         self.name = "User Input Error"
         self.message = message
 
-class CardSelectionRequestEvent(Event):
+
+
+class UserEvent(Event):
+    def __init__(self):
+        Event.__init__(self)
+         
+# class BoardSelectedEvent(UserEvent):
+#     def __init__(self, board):
+#         Event.__init__(self)
+#         self.name = 'Board Selected'
+#         self.board = board
+ 
+class CardSelectionRequestEvent(UserEvent):
     def __init__(self, card, hand, selectedCards):
+        Event.__init__(self)
         self.name = 'Card Select Request'
         self.card = card
         self.hand = hand
         self.selectedCards = selectedCards
  
+class CardPlayRequestEvent(UserEvent):
+    def __init__(self, hand, selectedCards):
+        Event.__init__(self)
+        self.name = 'Card Play Request'
+        self.hand = hand
+        self.selectedCards = selectedCards
+
+class CardPassRequestEvent(UserEvent):
+    def __init__(self, hand, selectedCards):
+        Event.__init__(self)
+        self.name = 'Card Pass Request'
+        self.hand = hand
+        self.selectedCards = selectedCards
+
+class PassCompleteAcceptanceRequestEvent(UserEvent):
+    def __init__(self, hand):
+        Event.__init__(self)
+        self.name = 'Pass Complete Acknowledgement Request'
+        self.hand = hand
+
+class TrickAcceptanceRequestEvent(UserEvent):
+    def __init__(self):
+        Event.__init__(self)
+        self.name = 'Trick Acceptance Request'
+                 
+        
+ 
 class CardSelectedEvent(Event):
     def __init__(self, card, hand, replacedCard):
+        Event.__init__(self)
         self.name = 'Card Selected'
         self.card = card
         self.hand = hand
         self.replacedCard = replacedCard
  
-class CardPlayRequestEvent(Event):
-    def __init__(self, hand, selectedCards):
-        self.name = 'Card Play Request'
-        self.hand = hand
-        self.selectedCards = selectedCards
-
-class CardPassRequestEvent(Event):
-    def __init__(self, hand, selectedCards):
-        self.name = 'Card Pass Request'
-        self.hand = hand
-        self.selectedCards = selectedCards
- 
 class CardPlayedEvent(Event):
     def __init__(self, hand, card, nextHand):
+        Event.__init__(self)
         self.name = 'Card Played'
         self.hand = hand
         self.card = card
@@ -57,63 +90,54 @@ class CardPlayedEvent(Event):
 
 class CardPassLockEvent(Event):
     def __init__(self, hand, cards):
+        Event.__init__(self)
         self.name = 'Card Passed'
         self.hand = hand
         self.cards = cards
          
 class PassCompleteEvent(Event):
     def __init__(self, hand, sentCards, receivedCards):
+        Event.__init__(self)
         self.name = 'Pass Complete'
         self.hand = hand
         self.sentCards = sentCards
         self.receivedCards = receivedCards
  
-class PassCompleteAcceptanceRequestEvent(Event):
-    def __init__(self, hand):
-        self.name = 'Pass Complete Acknowledgement Request'
-        self.hand = hand
-        
-class TrickAcceptanceRequestEvent(Event):
-    def __init__(self):
-        self.name = 'Trick Acceptance Request'
-                 
 class TrickCompleteEvent(Event):
     def __init__(self, winner):
+        Event.__init__(self)
         self.name = 'Trick Complete'
         self.winner = winner
  
 class TrickInitializedEvent(Event):
     def __init__(self, playOrder, nextHand):
+        Event.__init__(self)
         self.name = 'Trick Initialized'
         self.playOrder = playOrder
         self.nextHand = nextHand
  
 class RoundCompleteEvent(Event):
     def __init__(self):
+        Event.__init__(self)
         self.name = 'Round Complete'
  
 class RoundInitializedEvent(Event):
     def __init__(self):
+        Event.__init__(self)
         self.name = 'Round Initialized'
  
 class GameCompleteEvent(Event):
     def __init__(self):
+        Event.__init__(self)
         self.name = 'Game Complete'
  
 class GameInitializedEvent(Event):
     def __init__(self, hands, board):
+        Event.__init__(self)
         self.name = 'Game Initialized'
         self.hands = hands
         self.board = board
- 
- 
-class BoardSelectedEvent(Event):
-    def __init__(self, board):
-        self.name = 'Board Selected'
-        self.board = board
- 
-# 
-# 
+  
 class EventManager():
     def __init__(self):
         self.listeners = []

@@ -9,6 +9,8 @@ SCR_ATTR = {
             'rectangleColor' : (255, 0, 0),
             'scoreAreaColor' : (0, 64, 255),
             'scoreAreaCurrentTurnColor' : (135, 206, 250),
+            'font' : 'arial',
+            'notificationAreaColor' : (248, 255, 131),
             'cardHeight' : 105,
             'cardWidth' : 70,
             'handSpacing' : 40,
@@ -16,11 +18,53 @@ SCR_ATTR = {
             'scoreAreaHeight' : 40,
             'topLevelWidth' : 800,
             'topLevelHeight' : 600,
+            'notificationPadding' : (20,5),
+            'notificationHeight' : 20,
             'cardSelectionSpacing' : 30}
 
 RECT_LOOKUP = {}
 SURFACE_LOOKUP = {}
 
+class NotificationWIDGET(pygame.Surface):
+    def __init__(self):
+        rect = RECT_LOOKUP[('TopLevel', 'NotificationArea')]
+        pygame.Surface.__init__(self, rect.size)
+        self.fill(SCR_ATTR['notificationAreaColor'])
+
+        
+        self._message = 'This is a notification test to see how much information I can put into a single line of text and what happens if that amount is exceeded.'
+        self._changed = True
+    
+    def draw(self):
+        if self.hasChanged():
+            #clear existing text
+            self.fill(SCR_ATTR['notificationAreaColor'])
+            
+            #create new text
+            font = pygame.font.SysFont(SCR_ATTR['font'], 12)
+            text = font.render(self._message, 0, (10, 10, 10))
+            rect = self.get_rect(topleft=(5, 2))
+            self.blit(text, rect)        
+            self._setChanged(False)
+
+    def clearMessage(self):
+        self.setMessage('')
+    
+    def hasChanged(self):
+        return self._changed
+    
+    def setMessage(self, message):
+        self._setChanged(True)
+        self._message = message
+        
+    def redraw(self):
+        self._setChanged(True)
+
+    def _setChanged(self, value):
+        self._changed = True
+    
+
+        
 class CardWIDGET(pygame.sprite.Sprite):
     def __init__(self, card, rotation=0):
         pygame.sprite.Sprite.__init__(self)
@@ -80,12 +124,12 @@ class ScoreAreaWIDGET(pygame.Surface):
         self._changed = True
 
     def _createNameText(self):
-        font = pygame.font.Font(None, 36)
+        font = pygame.font.SysFont(SCR_ATTR['font'], 24)
         text = font.render(self.hand.getName(), 1, (10, 10, 10))
         return self._transformNameText(text)
     
     def _createScoreText(self):
-        font = pygame.font.Font(None, 24)
+        font = pygame.font.SysFont(SCR_ATTR['font'], 18)
         text = font.render('Score: %d (%d)' % (self.hand.score.gameScore ,self.hand.score.roundScore), 1, (10, 10, 10))
         return self._transformScoreText(text)
     
@@ -364,6 +408,12 @@ class Gui():
         
     def notify(self, event):
 
+        if isinstance(event, UserEvent):
+            self.notificationAreaWIDGET.clearMessage()
+
+        if isinstance(event, UserInputErrorEvent):
+            self.notificationAreaWIDGET.setMessage(event.message)
+
         if isinstance(event, GameInitializedEvent):
             self.initializeGame(event.hands, event.board)            
         
@@ -488,7 +538,9 @@ class Gui():
         self.drawBoard()        
         self.drawHands()
         self.drawScoreArea()
+        self.drawNotification()
         self.drawAnimations()
+        
         
         pygame.display.flip()
 
@@ -516,6 +568,13 @@ class Gui():
                 hand.draw()
                 pygame.display.get_surface().blit(hand, rect)
         
+    def drawNotification(self):
+        if self.notificationAreaWIDGET.hasChanged():
+            self.notificationAreaWIDGET.draw()
+            rect = RECT_LOOKUP[('TopLevel', 'NotificationArea')]
+            pygame.display.get_surface().blit(self.notificationAreaWIDGET, rect)
+
+    
     def drawScoreArea(self):
         for scoreArea in self.scoreAreaWIDGETS:
             if scoreArea.hasChanged():
@@ -564,6 +623,9 @@ class Gui():
         background = pygame.Surface(rect.size)
         background.fill((SCR_ATTR['tableTopColor']))        
         SURFACE_LOOKUP['Background'] = background
+        
+        #Setup notification area
+        self.notificationAreaWIDGET = NotificationWIDGET()
                 
         screen.blit(background, rect)
         pygame.display.flip()
@@ -672,7 +734,13 @@ class Gui():
         
         x = boardWidth/2 - cardWidth/2 + cardWidth + 2*cardSpaceHalf        
         RECT_LOOKUP[('Board', 'Right')] = Rect(x, y, cardWidth, cardHeight)
-
+        
+        notifx, notify = SCR_ATTR['notificationPadding']
+        x, y = self.getPadding() + notifx, self.getPadding() + notify
+        width = SCR_ATTR['topLevelWidth'] - 2 * notifx - 2 * self.getPadding()
+        height = SCR_ATTR['notificationHeight']
+        RECT_LOOKUP[('TopLevel','NotificationArea')] = Rect(x, y, width, height)
+        
     def mapSeatAssignment(self, hands):
         
         seatAssignment = {}
