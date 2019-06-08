@@ -4,14 +4,13 @@ Created on Apr 21, 2019
 @author: Doug Kamen
 '''
 
-from Hand import Hand, Board
-from Deck import Deck, Card
-from Team import Team 
-from Hand import Score
 from GameController import *
+from Team import Team
 import importlib
 import math
 import random
+
+
         
 class InvalidCardException(Exception):
     pass
@@ -52,6 +51,12 @@ class GameMaster():
             
         elif isinstance(event, TrickCompleteEvent):
             self.initializeTrick(event.winner)
+
+    def createHand(self, name, score=None, inputString=None):
+        return Hand(name, score, inputString)
+
+    def createScore(self):
+        return Score()
 
     def deal(self):
         Deck().deal(self.playOrder)
@@ -135,19 +140,15 @@ class GameMaster():
             
         #Set teams and hands
         for i, player in enumerate(players):
-            hand = Hand(player, score=self.getScoreObject())
+            hand = self.createHand(player, score=self.createScore())
             self.hands.append(hand)
             if self.numTeams and self.numPlayers != self.numTeams:
                 if i < self.numTeams:
                     self.teams.append(Team())
                 self.teams[i%2].hands.append(hand)        
 
-    def getScoreObject(self):
-        return Score()
-
     def isGameComplete(self):
         return max([hand.score.gameScore for hand in self.hands]) > self.maxScore
-#        return max(self.gameScore) > self.maxScore
     
     def isRoundComplete(self):
         return len(self.hands[0]) == 0
@@ -241,10 +242,9 @@ class GameMaster():
             
     def validatePlay(self, hand, cards):
         pass
-    
 
 
-class Hand:
+class Hand():
     
     def __init__(self, name=None, score=None, inputString=None):
         self.cards = []
@@ -254,9 +254,6 @@ class Hand:
             self.score = Score()
         else:
             self.score =  score
-        self.passStatus = ''
-        self.passedCards = []
-        self.receivedCards = []
         
     def addCard(self, card):
         self.cards.append(card)
@@ -310,12 +307,6 @@ class Hand:
 
             return cards
         
-    def getPassedCards(self):
-        return self.passedCards
-    
-    def getReceivedCards(self):
-        return self.receivedCards
-                
     def hasSuit(self, suit):
         return len([card for card in self.card if card.suit == suit]) > 0
     
@@ -325,16 +316,6 @@ class Hand:
     def playCard(self, playedCard):
         self.cards.remove(playedCard)
     
-    def setPassedCards(self, cards):
-        self.passedCards.clear()
-        for card in cards:
-            self.passedCards.append(card)
-
-    def setReceivedCards(self, cards):
-        self.receivedCards.clear()
-        for card in cards:
-            self.receivedCards.append(card)
-        
     def sortHand(self):
         self.cards = sorted(self.cards, key=lambda Card: (Card.suit, Card.getRank()))
         
@@ -349,6 +330,9 @@ class Hand:
     
     def __setitem__(self, index, value):
         self.cards[index] = value
+
+
+
         
         
 class Board():
@@ -365,12 +349,6 @@ class Score():
     def __init__(self):
         self.gameScore = 0
         self.roundScore = 0
-        
-class HeartsScore(Score):
-    def __init__(self):
-        Score.__init__(self)
-        self.roundPointsTaken = False
-        
         
 class Deck:
     

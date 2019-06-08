@@ -4,7 +4,7 @@ Created on May 20, 2019
 @author: Doug Kamen
 '''
 from Team import Team 
-from Game import GameMaster, InvalidCardException, Hand, HeartsScore, Card, Deck
+from Game import GameMaster, InvalidCardException, Hand, Score, Card, Deck
 from GameController import *
 
 
@@ -51,6 +51,12 @@ class Hearts(GameMaster):
                 points += -10
         return points
 
+    def createHand(self, name, score=None, inputString=None):
+        return HeartsHand(name, score, inputString)
+
+    def createScore(self):
+        return HeartsScore()
+    
     def determineTrickWinner(self, playOrder):
         suit = self.board.cards[0].suit
         return max([(card.getRank(), hand) for card, hand in zip(self.board.cards, playOrder) if card.suit == suit])[1]
@@ -72,9 +78,6 @@ class Hearts(GameMaster):
         offset = self.passFromOffset[self.currentRoundPassType]
         return lookup[idx+offset]        
         
-    def getScoreObject(self):
-        return HeartsScore()
-    
     def isFirstTrick(self, hand):
         return len(hand.cards) == 13
 
@@ -203,11 +206,35 @@ class Hearts(GameMaster):
                 raise InvalidCardException('Must follow suit')
         
         return True
-                                                    
-if __name__ == "__main__":
 
-    #players = []    
-    players = ['Al', 'Bob', 'Carol', 'Doug']
-    hearts = Hearts(players)
-    hearts.playGame()
+class HeartsHand(Hand):
+    
+    def __init__(self, name, score=None, inputString=None):
+        Hand.__init__(self, name, score, inputString)
 
+        self.passStatus = ''
+        self.passedCards = []
+        self.receivedCards = []
+
+    def getPassedCards(self):
+        return self.passedCards
+    
+    def getReceivedCards(self):
+        return self.receivedCards
+                
+    def setPassedCards(self, cards):
+        self.passedCards.clear()
+        for card in cards:
+            self.passedCards.append(card)
+
+    def setReceivedCards(self, cards):
+        self.receivedCards.clear()
+        for card in cards:
+            self.receivedCards.append(card)
+        
+class HeartsScore(Score):
+    def __init__(self):
+        Score.__init__(self)
+        self.roundPointsTaken = False
+        
+        

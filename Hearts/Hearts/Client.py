@@ -216,7 +216,6 @@ class HandWIDGET(pygame.Surface):
         
     def draw(self):
         
-        print('ReceivedCard: %d' % len(self.hand.receivedCards))
         if self.hasChanged():
             rect = RECT_LOOKUP[(('Hand', self.seatLabel), 'Rectangle')]
             pygame.draw.rect(self, SCR_ATTR['rectangleColor'], rect, 1)
