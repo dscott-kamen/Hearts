@@ -9,6 +9,9 @@ from Deck import Deck, Card
 from Team import Team 
 from Hand import Score
 from GameController import *
+import importlib
+import math
+import random
         
 class InvalidCardException(Exception):
     pass
@@ -239,3 +242,196 @@ class GameMaster():
     def validatePlay(self, hand, cards):
         pass
     
+
+
+class Hand:
+    
+    def __init__(self, name=None, score=None, inputString=None):
+        self.cards = []
+        if inputString != None: self.addCardsFromString(inputString)
+        self.name = str(name)
+        if score == None:
+            self.score = Score()
+        else:
+            self.score =  score
+        self.passStatus = ''
+        self.passedCards = []
+        self.receivedCards = []
+        
+    def addCard(self, card):
+        self.cards.append(card)
+    
+    def addCardsFromString(self, inputString):
+        for item in inputString.split():
+            self.cards.append(Card.createCardFromString(item))
+    
+    def getName(self):
+        return self.name
+
+    def getCard(self, playableCards, promptMessage):
+        return self.getCards(playableCards, 1, promptMessage)[0]
+    
+    def getCards(self, playableCards, numCards, promptMessage):
+        
+        while 1:
+            usrInput = input(promptMessage).upper().split()
+   
+            if len(usrInput) != numCards:
+                print('Wrong number of cards provided.  Please re-enter.')
+                continue
+            
+            cards = []
+            validInput = True
+            while validInput:
+                for token in usrInput: 
+                
+                    #Convert input into a card
+                    try:
+                        card = Card(token[0], token[1])
+                        if not self.hasCard(card):
+                            print('%s, %s%s is not in your hand.  Please re-enter.\n' % (self.getName(), card.getValue(), card.getSuit()))
+                            validInput = False
+                            return None
+                            break
+                    except:
+                        validInput = False
+                        print('%s, %s is not a valid card. Please re-enter.\n' % (self.getName(), usrInput))
+                        return None
+                        break
+
+                    if card not in playableCards:
+                        print('%s, %s%s is not a valid play.  Please re-enter.\n' % (self.getName(), card.getValue(), card.getSuit()))
+                        validInput = False
+                        break
+                    
+                    cards.append(card) 
+                       
+                break
+
+            return cards
+        
+    def getPassedCards(self):
+        return self.passedCards
+    
+    def getReceivedCards(self):
+        return self.receivedCards
+                
+    def hasSuit(self, suit):
+        return len([card for card in self.card if card.suit == suit]) > 0
+    
+    def hasCard(self, card):
+        return card in self.cards
+    
+    def playCard(self, playedCard):
+        self.cards.remove(playedCard)
+    
+    def setPassedCards(self, cards):
+        self.passedCards.clear()
+        for card in cards:
+            self.passedCards.append(card)
+
+    def setReceivedCards(self, cards):
+        self.receivedCards.clear()
+        for card in cards:
+            self.receivedCards.append(card)
+        
+    def sortHand(self):
+        self.cards = sorted(self.cards, key=lambda Card: (Card.suit, Card.getRank()))
+        
+    def __str__(self):
+        return ' '.join((str(card) for card in self.cards))
+    
+    def __len__(self):
+        return len(self.cards)
+
+    def __getitem__(self, index):
+        return self.cards[index]
+    
+    def __setitem__(self, index, value):
+        self.cards[index] = value
+        
+        
+class Board():
+    def __init__(self, name=None, inputString=None):
+        Hand.__init__(self, name, inputString)
+        self.cardSource = {}
+        
+        
+    def addCard(self, card, hand):
+        Hand.addCard(self, card)
+        self.cardSource[str(card)] = hand
+    
+class Score():
+    def __init__(self):
+        self.gameScore = 0
+        self.roundScore = 0
+        
+class HeartsScore(Score):
+    def __init__(self):
+        Score.__init__(self)
+        self.roundPointsTaken = False
+        
+        
+class Deck:
+    
+    def __init__(self):
+        self.cards = []
+        for suit in Card.SUIT:
+            for value in Card.VALUE:
+                self.cards.append(Card(value, suit))
+        
+    def deal(self, players, numCards=-1):
+        print(players[-1].getName() + ' is the dealer.')
+        random.shuffle(self.cards)
+
+        #If number of cards not provided, deal all cards
+        if numCards == -1:
+            numCards = int(len(self.cards)/len(players))
+
+        #Deal the cards
+        for j in range(numCards):
+            for player in players:
+                player.addCard(self.getNextCard())
+        
+        #Sort the hands
+        for player in players:
+            player.sortHand()    
+            
+    def getNextCard(self):
+        return self.cards.pop()
+
+
+class Card:
+    SUIT = ('C', 'D', 'H', 'S')
+    VALUE = ('2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A')
+
+    def __init__(self, value, suit):
+        self.suit = suit
+        self.value = value
+
+    @classmethod
+    def createCardFromString(cls, cardString):
+        if cardString[0] not in cls.VALUE or cardString[1] not in cls.SUIT:
+            raise TypeError("Not a valid card %s" % cardString)
+        return Card(cardString[0], cardString[1])
+        
+    def getNumValue(self):
+        return self.numValue
+
+    def getRank(self):
+        return self.VALUE.index(self.value)
+    
+    def getSuit(self):
+        return self.suit
+    
+    def getValue(self): 
+        return self.value
+    
+    def __str__(self):
+        return self.getValue() + self.getSuit()
+    
+    def __eq__(self, other):
+        if self is None and other is None: 
+            return True
+        elif self is not None and other is not None:
+            return self.suit == other.suit and self.value == other.value

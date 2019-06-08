@@ -1,7 +1,6 @@
 import os, pygame
-from Hearts import Hearts
+from Hearts import *
 from GameController import *
-from Deck import Card
 from resource import *
 
 SCR_ATTR = {

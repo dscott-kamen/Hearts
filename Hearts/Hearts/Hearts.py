@@ -3,10 +3,8 @@ Created on May 20, 2019
 
 @author: Doug Kamen
 '''
-from Hand import Hand, HeartsScore
-from Deck import Card, Deck
 from Team import Team 
-from Game import GameMaster, InvalidCardException
+from Game import GameMaster, InvalidCardException, Hand, HeartsScore, Card, Deck
 from GameController import *
 
 
