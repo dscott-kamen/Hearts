@@ -42,62 +42,54 @@ class CardWIDGET(pygame.sprite.Sprite):
 
         
 class ScoreAreaWIDGET(pygame.Surface):
-    def __init__(self, seatLabel, hand, evManager):
+    def __init__(self, seatLabel, hand):
         rect = RECT_LOOKUP['TopLevel', ('ScoreArea', seatLabel)]
         pygame.Surface.__init__(self, rect.size)
         
         self.seatLabel = seatLabel
         self.hand = hand
-        self.evManager = evManager
-        self.evManager.registerListener(self)
-        self.changed = True
         self.currentTurn = False
-    
-    def notify(self, event):
 
-        if isinstance(event, CardPlayedEvent):
-            self.currentTurn = (event.nextHand == self.hand)
-            self.changed = True
-
-        if isinstance(event, TrickInitializedEvent):
-            self.currentTurn = (event.nextHand == self.hand)
-            self.changed = True
-
-        if isinstance(event, TrickCompleteEvent):
-            self.changed = True
-            
-        if isinstance(event, RoundCompleteEvent):
-            self.changed = True
-            
-        if isinstance(event, GameInitializedEvent):
-            self.changed = True
-    
-    def createNameText(self):
-        font = pygame.font.Font(None, 36)
-        text = font.render(self.hand.getName(), 1, (10, 10, 10))
-        return self.transformNameText(text)
-    
-    def createScoreText(self):
-        font = pygame.font.Font(None, 24)
-        text = font.render('Score: %d (%d)' % (self.hand.score.gameScore ,self.hand.score.roundScore), 1, (10, 10, 10))
-        return self.transformScoreText(text)
+        self._changed = True
     
     def draw(self):
-        if self.changed:
-            self.fill((self.getScoreAreaColor()))
+        if self._changed:
+            self.fill((self._getScoreAreaColor()))
             
             rect = RECT_LOOKUP[('TopLevel', ('ScoreArea', self.seatLabel))]
             pygame.draw.rect(self, SCR_ATTR['rectangleColor'], self.get_rect(), 1)
         
             #create name text
-            text, rect = self.createNameText()    
+            text, rect = self._createNameText()    
             self.blit(text, rect)
         
             #create score text
-            text, rect = self.createScoreText()            
+            text, rect = self._createScoreText()            
             self.blit(text, rect)
 
-    def getCardRotation(self):
+        self._changed = False
+
+    def hasChanged(self):
+        return self._changed
+
+    def redraw(self):
+        self._changed = True
+            
+    def setCurrentTurn(self, currentTurn):
+        self.currentTurn = currentTurn
+        self._changed = True
+
+    def _createNameText(self):
+        font = pygame.font.Font(None, 36)
+        text = font.render(self.hand.getName(), 1, (10, 10, 10))
+        return self._transformNameText(text)
+    
+    def _createScoreText(self):
+        font = pygame.font.Font(None, 24)
+        text = font.render('Score: %d (%d)' % (self.hand.score.gameScore ,self.hand.score.roundScore), 1, (10, 10, 10))
+        return self._transformScoreText(text)
+    
+    def _getCardRotation(self):
         if self.seatLabel == 'Right':
             return 90
         elif self.seatLabel == 'Left':
@@ -105,30 +97,30 @@ class ScoreAreaWIDGET(pygame.Surface):
         else:
             return 0
 
-    def getScoreAreaColor(self):
+    def _getScoreAreaColor(self):
             if self.currentTurn:
                 return SCR_ATTR['scoreAreaCurrentTurnColor']
             else:
                 return SCR_ATTR['scoreAreaColor']
         
-    def transformNameText(self, text):
+    def _transformNameText(self, text):
         if self.seatLabel == 'Top' or self.seatLabel == 'Bottom':
             return text, text.get_rect(midleft=(5,self.get_rect().height/2))
         elif self.seatLabel == 'Left':
-            text = pygame.transform.rotate(text, self.getCardRotation())
+            text = pygame.transform.rotate(text, self._getCardRotation())
             return text, text.get_rect(midtop=(self.get_rect().width/2, 5))
         elif self.seatLabel == 'Right':
-            text = pygame.transform.rotate(text, self.getCardRotation())
+            text = pygame.transform.rotate(text, self._getCardRotation())
             return text, text.get_rect(midbottom=(self.get_rect().width/2, self.get_rect().height - 5))
 
-    def transformScoreText(self, text):
+    def _transformScoreText(self, text):
         if self.seatLabel == 'Top' or self.seatLabel == 'Bottom':
             return text, text.get_rect(midright=(self.get_rect().width - 5, self.get_rect().height/2))
         elif self.seatLabel == 'Right':
-            text = pygame.transform.rotate(text, self.getCardRotation())
+            text = pygame.transform.rotate(text, self._getCardRotation())
             return text, text.get_rect(midtop=(self.get_rect().width/2, 5))
         elif self.seatLabel == 'Left':
-            text = pygame.transform.rotate(text, self.getCardRotation())
+            text = pygame.transform.rotate(text, self._getCardRotation())
             return text, text.get_rect(midbottom=(self.get_rect().width/2, self.get_rect().height - 5))
  
 
@@ -165,81 +157,109 @@ class Animation():
     
 
 class HandWIDGET(pygame.Surface):
-    def __init__(self, seatLabel, hand, evManager):
+    def __init__(self, seatLabel, hand):
 
         self.parentRect = RECT_LOOKUP[('TopLevel', ('Hand', seatLabel))]
-
         pygame.Surface.__init__(self, self.parentRect.size)
+        self.fill(SCR_ATTR['tableTopColor'])
+
         self.hand = hand 
         self.cardWIDGETS = pygame.sprite.LayeredUpdates()
         self.seatLabel = seatLabel
-        self.changed = False
         self.selectedCards = []
-        self.evManager = evManager
-        self.evManager.registerListener(self)
-        
-        self.initialize()
-        
-    def notify(self, event):
-        
-        if isinstance(event, CardSelectedEvent):
-            if event.hand == self.hand:
-                self.toggleSelectedCard(event.card, event.replacedCard)
-                self.changed = True
-                self.clearCardArea()
 
-        elif isinstance(event, CardPlayedEvent):
-            self.currentTurn = (event.nextHand == self.hand)
-            if event.hand == self.hand:
-                self.changed = True
-                self.selectedCards.clear()
-                self.buildCards()
-
-        elif isinstance(event, PassCompleteEvent):
-            self.changed = True
-            self.selectedCards.clear()
-            self.buildCards()
-                        
-        elif isinstance(event, RoundInitializedEvent):
-            self.changed = True
-            self.buildCards()
-
-        elif isinstance(event, TrickInitializedEvent):
-            self.currentTurn = (event.nextHand == self.hand)
-            
-    def buildCards(self):
-        #cleanup for removed widgets
-        self.clearCardArea()
-
-        self.cardWIDGETS.empty()
-        rotation = self.getCardRotation()
-        for card in self.hand.cards:
-            cardWIDGET = CardWIDGET(card, rotation)
-            self.cardWIDGETS.add(cardWIDGET)
-
-    def clearCardArea(self):
-        background = SURFACE_LOOKUP['Background']
-        self.blit(background, self.get_rect())
+        self._changed = False        
+        self._passedCards = []
         
     def draw(self):
         
-        if self.changed:
+        print('ReceivedCard: %d' % len(self.hand.receivedCards))
+        if self.hasChanged():
             rect = RECT_LOOKUP[(('Hand', self.seatLabel), 'Rectangle')]
             pygame.draw.rect(self, SCR_ATTR['rectangleColor'], rect, 1)
 
-            spacing = self.getCardSpacing(self.getSpanRange(), len(self.hand.cards))        
+            spacing = self._getCardSpacing(self._getSpanRange(), len(self.hand.cards))        
             notSelectedRect = RECT_LOOKUP[(('Hand', self.seatLabel), 'CardNotSelected')]
             selectedRect = RECT_LOOKUP[(('Hand', self.seatLabel), 'CardSelected')]
         
             for i, card in enumerate(self.cardWIDGETS):
-                cardRect = self.getCardRect(card, i, spacing, selectedRect, notSelectedRect)
-                self.blit(card.image, cardRect)
+                cardRect = self._getCardRect(card, i, spacing, selectedRect, notSelectedRect)
+                image = self._applyCardColor(card)
+                self.blit(image, cardRect)
                 
                 #Functionality added to support mouse clicks on sprites
                 card.setRect(get_absolute_rect(cardRect, self.parentRect))
                 card.setRelativeRect(cardRect)
+            
+            self._setChanged(False)
 
-    def getCardRect(self, card, cardIndex, spacing, selectedRect, notSelectedRect):
+    def getCardWIDGET(self, card):
+        for cardWIDGET in self.cardWIDGETS:
+            if cardWIDGET.card == card:
+                return cardWIDGET
+        return None
+
+    def getSelectedCards(self):
+        return self.selectedCards
+
+    def hasChanged(self):
+        return self._changed
+
+    def notifyCardChange(self):
+        self._setChanged(True)
+        self._buildCards()
+        
+    def notifyCardPlayed(self):
+        self.selectedCards.clear()
+        self.notifyCardChange()
+        
+    def notifyCardPassLocked(self):
+        self.redraw()
+    
+    def setPassComplete(self):
+        self.selectedCards.clear()
+        self.notifyCardChange()
+        
+    def redraw(self):
+        self._setChanged(True)
+        self._clearCardArea()
+        
+    def toggleSelectedCard(self, selectedCard, replacedCard):
+        
+        if replacedCard is not None:
+            self.selectedCards.remove(replacedCard)
+            
+        if selectedCard in self.selectedCards:
+            self.selectedCards.remove(selectedCard)
+        else:
+            self.selectedCards.append(selectedCard)
+
+        self.redraw()
+
+    def _applyCardColor(self, card):
+        if ((self.hand.passStatus == 'Submitted' and card.card in self.selectedCards) or 
+            (self.hand.passStatus == 'Submitted' and card.card in self.hand.getReceivedCards())):
+            image = card.image.copy()
+            image.fill((60, 60, 0, 0), special_flags=pygame.BLEND_SUB)
+        else:
+            image = card.image
+        return image
+
+    def _buildCards(self):
+        #cleanup for removed widgets
+        self._clearCardArea()
+
+        self.cardWIDGETS.empty()
+        rotation = self._getCardRotation()
+        for card in self.hand.cards:
+            cardWIDGET = CardWIDGET(card, rotation)
+            self.cardWIDGETS.add(cardWIDGET)
+
+    def _clearCardArea(self):
+        background = SURFACE_LOOKUP['Background']
+        self.blit(background, self.get_rect())
+        
+    def _getCardRect(self, card, cardIndex, spacing, selectedRect, notSelectedRect):
         if card.card in self.selectedCards:
             rect = selectedRect.copy()
         else:
@@ -253,7 +273,7 @@ class HandWIDGET(pygame.Surface):
             rect.bottom = rect.bottom - cardIndex * spacing - SCR_ATTR['cardWidth']
         return rect
 
-    def getCardRotation(self):
+    def _getCardRotation(self):
         if self.seatLabel == 'Right':
             return 90
         elif self.seatLabel == 'Left':
@@ -261,42 +281,20 @@ class HandWIDGET(pygame.Surface):
         else:
             return 0
 
-    def getCardSpacing(self, spanRange, cardCount):
+    def _getCardSpacing(self, spanRange, cardCount):
         if cardCount == 1 or spanRange > cardCount * (SCR_ATTR['cardWidth'] + SCR_ATTR['cardSpacing']):
             return SCR_ATTR['cardWidth'] + 0.5 * SCR_ATTR['cardSpacing']
         else:
             return int((spanRange - SCR_ATTR['cardWidth'] - 0.5 * SCR_ATTR['cardSpacing'])//(cardCount - 1))
 
-    def getCardWIDGET(self, card):
-        for cardWIDGET in self.cardWIDGETS:
-            if cardWIDGET.card == card:
-                return cardWIDGET
-        return None
-
-    def getSelectedCards(self):
-        return self.selectedCards
-
-    def getSpanRange(self):
+    def _getSpanRange(self):
         if self.seatLabel == 'Top' or self.seatLabel == 'Bottom':
             return self.parentRect.width
         else:
             return self.parentRect.height
 
-    def initialize(self):
- 
-        self.changed = True
-        self.fill(SCR_ATTR['tableTopColor'])
-         
-    def toggleSelectedCard(self, selectedCard, replacedCard):
-        
-        if replacedCard is not None:
-            self.selectedCards.remove(replacedCard)
-            
-        if selectedCard in self.selectedCards:
-            self.selectedCards.remove(selectedCard)
-        else:
-            self.selectedCards.append(selectedCard)
-
+    def _setChanged(self, value):
+        self._changed = value
             
 class BoardWIDGET(pygame.Surface):
     def __init__(self, gui, board, seatAssignment, evManager):
@@ -304,33 +302,22 @@ class BoardWIDGET(pygame.Surface):
         pygame.Surface.__init__(self, rect.size)
         self.fill(SCR_ATTR['tableTopColor'])
         
-        self.gui = gui
         self.board = board
         self.seatAssignment = seatAssignment
-        self.changed = True
         self.cardWIDGETS = []
         self.playOrder = []
-        self.evManager = evManager
-        self.evManager.registerListener(self)
         self.playCardAnimation = False
+
+        self._changed = True
             
-    def notify(self, event):
-
-        if isinstance(event, TrickCompleteEvent):
-            self.changed = True
-                        
-        elif isinstance(event, TrickInitializedEvent):
-            self.setPlayOrder(event.playOrder)
-            self.changed = True
-
-    def clearBoard(self):
+    def _clearBoard(self):
         background = SURFACE_LOOKUP['Background']
         self.blit(background, self.get_rect())
 
     def draw(self):
         
-        if self.changed:
-            self.clearBoard()
+        if self.hasChanged():
+            self._clearBoard()
             
             for i, (card, hand) in enumerate(zip(self.board.cards, self.playOrder)):                
 
@@ -338,6 +325,7 @@ class BoardWIDGET(pygame.Surface):
                     continue
                 cardWIDGET = CardWIDGET(card)
                 self.blit(cardWIDGET.image, self.getCardRect(hand))
+            self._setChanged(False)
 
     def getCard(self, hand):
         idx = self.playOrder.index(hand)
@@ -347,9 +335,18 @@ class BoardWIDGET(pygame.Surface):
         seatLabel = self.seatAssignment[hand.getName()]
         return RECT_LOOKUP[('Board', seatLabel)]
      
+    def hasChanged(self):
+        return self._changed
+     
+    def redraw(self):
+        self._setChanged(True)
+        
     def setPlayOrder(self, playOrder):
         self.playOrder = playOrder
         
+    def _setChanged(self, value):
+        self._changed = value
+
         
 class Gui():
     def __init__(self, evManager):
@@ -370,16 +367,81 @@ class Gui():
         if isinstance(event, GameInitializedEvent):
             self.initializeGame(event.hands, event.board)            
         
-        if isinstance(event, CardPlayedEvent):
+        elif isinstance(event, CardSelectedEvent):
+            handWIDGET = self._getHandWIDGET(event.hand)
+            handWIDGET.toggleSelectedCard(event.card, event.replacedCard)
+
+        elif isinstance(event, CardPlayedEvent):
+            #Board update
+            self.boardWIDGET.redraw()
+
+            #Score Area - update turn from played card
+            scoreAreaWIDGET = self._getScoreAreaWIDGET(event.hand)
+            scoreAreaWIDGET.setCurrentTurn(False)
+
+            #Score Area - update turn from currentTurn
+            if event.nextHand is not None:
+                scoreAreaWIDGET = self._getScoreAreaWIDGET(event.nextHand)
+                scoreAreaWIDGET.setCurrentTurn(True)
+            
+            #Trigger playcard animation
             self.animatePlayCard(event.hand, event.card)
 
-        if isinstance(event, TrickCompleteEvent):
-            self.animateTrickWinner(event.winner)
+            #Hand Area - update played card
+            handWIDGET = self._getHandWIDGET(event.hand)
+            handWIDGET.notifyCardPlayed()
             
+        elif isinstance(event, CardPassLockEvent):
+            handWIDGET = self._getHandWIDGET(event.hand)
+            handWIDGET.notifyCardPassLocked()
+            
+        elif isinstance(event, TrickInitializedEvent):
+            self.boardWIDGET.setPlayOrder(event.playOrder)
+            self.boardWIDGET.redraw()
+
+            scoreAreaWIDGET = self._getScoreAreaWIDGET(event.nextHand)
+            scoreAreaWIDGET.setCurrentTurn(True)
+
+        elif isinstance(event, TrickCompleteEvent):
+            
+            #Redraw to update scores
+            scoreAreaWIDGET = self._getScoreAreaWIDGET(event.winner)
+            scoreAreaWIDGET.redraw()
+            
+            #Trigger trickwinner automation
+            self.animateTrickWinner(event.winner)
+
+        elif isinstance(event, RoundInitializedEvent):
+            for handWIDGET in self.handWIDGETS:
+                handWIDGET.notifyCardChange()
+
+        elif isinstance(event, RoundCompleteEvent):
+            for scoreAreaWIDGET in self.scoreAreaWIDGETS:
+                scoreAreaWIDGET.redraw()
+                
+        elif isinstance(event, PassCompleteEvent):
+            handWIDGET = self.getHandWIDGET(event.hand)
+            handWIDGET.setPassComplete()
+
+        elif isinstance(event, GameInitializedEvent):
+            for scoreAreaWIDGET in self.scoreAreaWIDGETS:
+                scoreAreaWIDGET.redraw()
+    
+    def _getScoreAreaWIDGET(self, hand):
+        for scoreAreaWIDGET in self.scoreAreaWIDGETS:
+            if scoreAreaWIDGET.hand == hand:
+                return scoreAreaWIDGET
+
+    def _getHandWIDGET(self, hand):
+        for handWIDGET in self.handWIDGETS:
+            if handWIDGET.hand == hand:
+                return handWIDGET
+
+
     def animatePlayCard(self, hand, card):
         
         handWIDGET = self.getHandWIDGET(hand)
-        cardWIDGET = handWIDGET.getCardWIDGET(handWIDGET.getSelectedCards()[0])
+        cardWIDGET = handWIDGET.getCardWIDGET(card)
 
         self.boardWIDGET.playCardAnimation = True
         startRect = cardWIDGET.rect
@@ -406,8 +468,7 @@ class Gui():
                 pygame.display.get_surface().blit(cardBackground, rect)
             
                 for handWIDGET in self.handWIDGETS:
-                    handWIDGET.changed = True
-                self.boardWIDGET.changed = True
+                    handWIDGET.redraw()
             
             if anima.animationType == 'TrickWinner':
                 
@@ -417,9 +478,9 @@ class Gui():
                 pygame.display.get_surface().blit(cardBackground, rect)
 
                 for hand in self.handWIDGETS:
-                    hand.changed = True
+                    hand.redraw()
                 for scoreAreaWIDGET in self.scoreAreaWIDGETS:
-                    scoreAreaWIDGET.changed = True
+                    scoreAreaWIDGET.redraw()
                     
     def draw(self):
         self.setAnimationRedraws()
@@ -443,27 +504,24 @@ class Gui():
 
 
     def drawBoard(self):
-        if self.boardWIDGET.changed:
+        if self.boardWIDGET.hasChanged():
             self.boardWIDGET.draw()
             rect = RECT_LOOKUP[('TopLevel', 'Board')]
             pygame.display.get_surface().blit(self.boardWIDGET, rect)
-            self.boardWIDGET.changed = False
         
     def drawHands(self):
         for hand in self.handWIDGETS:
-            if hand.changed:
+            if hand.hasChanged():
                 rect = RECT_LOOKUP[('TopLevel', ('Hand', hand.seatLabel))]
                 hand.draw()
                 pygame.display.get_surface().blit(hand, rect)
-                hand.changed = False
         
     def drawScoreArea(self):
         for scoreArea in self.scoreAreaWIDGETS:
-            if scoreArea.changed:
+            if scoreArea.hasChanged():
                 rect = RECT_LOOKUP[('TopLevel', ('ScoreArea', scoreArea.seatLabel))]        
                 scoreArea.draw()
                 pygame.display.get_surface().blit(scoreArea, rect)
-                scoreArea.changed = False
         
     def getCardAreaHeight(self):
         return SCR_ATTR['cardHeight'] + SCR_ATTR['cardSpacing']
@@ -515,10 +573,10 @@ class Gui():
         self.seatAssignment = self.mapSeatAssignment(hands)
 
         for hand, seatLabel in zip(hands, self.seatLabels):
-            handWIDGET = HandWIDGET(seatLabel, hand, self.evManager)
+            handWIDGET = HandWIDGET(seatLabel, hand)
             self.handWIDGETS.append(handWIDGET)
             
-            scoreAreaWIDGET = ScoreAreaWIDGET(seatLabel, hand, self.evManager)
+            scoreAreaWIDGET = ScoreAreaWIDGET(seatLabel, hand)
             self.scoreAreaWIDGETS.append(scoreAreaWIDGET)
         
         self.boardWIDGET = BoardWIDGET(self, board, self.seatAssignment, self.evManager)
@@ -627,7 +685,7 @@ class Gui():
         if anima.animationType == 'PlayCard':
             
             self.boardWIDGET.playCardAnimation = False
-            self.boardWIDGET.changed = True
+            self.boardWIDGET.redraw()
 
         if anima.animationType == 'TrickWinner':
 

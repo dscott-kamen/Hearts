@@ -29,24 +29,27 @@ class GameMaster():
 
     def notify(self, event):
         
-        if isinstance(event, TrickAcceptanceRequestEvent):
-            self.processTrick()
+        if isinstance(event, CardPlayRequestEvent):
+            self.playCard(event.hand, event.selectedCards)
+        
+        elif isinstance(event, CardSelectionRequestEvent):
+            self.selectCard(event.card, event.hand, event.selectedCards)
+
+        elif isinstance(event, GameInitializedEvent):
+            self.initializeRound()
+            
+        elif isinstance(event, RoundCompleteEvent):
+            self.initializeRound()
             
         elif isinstance(event, RoundInitializedEvent):
             self.initializeTrick()
             
-        elif isinstance(event, CardSelectionRequestEvent):
-            self.selectCard(event.card, event.hand, event.selectedCards)
-
+        elif isinstance(event, TrickAcceptanceRequestEvent):
+            self.processTrick()
+            
         elif isinstance(event, TrickCompleteEvent):
             self.initializeTrick(event.winner)
 
-        elif isinstance(event, RoundCompleteEvent):
-            self.initializeRound()
-            
-        elif isinstance(event, GameInitializedEvent):
-            self.initializeRound()
-            
     def deal(self):
         Deck().deal(self.playOrder)
 

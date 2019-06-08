@@ -17,8 +17,9 @@ class Hand:
             self.score = Score()
         else:
             self.score =  score
-        self.passComplete = False
+        self.passStatus = ''
         self.passedCards = []
+        self.receivedCards = []
         
     def addCard(self, card):
         self.cards.append(card)
@@ -74,6 +75,9 @@ class Hand:
         
     def getPassedCards(self):
         return self.passedCards
+    
+    def getReceivedCards(self):
+        return self.receivedCards
                 
     def hasSuit(self, suit):
         return len([card for card in self.card if card.suit == suit]) > 0
@@ -85,7 +89,14 @@ class Hand:
         self.cards.remove(playedCard)
     
     def setPassedCards(self, cards):
-        self.passedCards = cards
+        self.passedCards.clear()
+        for card in cards:
+            self.passedCards.append(card)
+
+    def setReceivedCards(self, cards):
+        self.receivedCards.clear()
+        for card in cards:
+            self.receivedCards.append(card)
         
     def sortHand(self):
         self.cards = sorted(self.cards, key=lambda Card: (Card.suit, Card.getRank()))

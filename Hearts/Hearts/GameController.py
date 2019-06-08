@@ -4,7 +4,6 @@ import pygame
 from pygame.locals import *
 import time 
 from resource import *
-from dataclasses import replace
 
 class Event():
     def __init__(self):
@@ -42,6 +41,12 @@ class CardPlayRequestEvent(Event):
         self.name = 'Card Play Request'
         self.hand = hand
         self.selectedCards = selectedCards
+
+class CardPassRequestEvent(Event):
+    def __init__(self, hand, selectedCards):
+        self.name = 'Card Pass Request'
+        self.hand = hand
+        self.selectedCards = selectedCards
  
 class CardPlayedEvent(Event):
     def __init__(self, hand, card, nextHand):
@@ -49,14 +54,24 @@ class CardPlayedEvent(Event):
         self.hand = hand
         self.card = card
         self.nextHand = nextHand
+
+class CardPassLockEvent(Event):
+    def __init__(self, hand, cards):
+        self.name = 'Card Passed'
+        self.hand = hand
+        self.cards = cards
          
 class PassCompleteEvent(Event):
-    def __init__(self):
+    def __init__(self, hand, sentCards, receivedCards):
         self.name = 'Pass Complete'
+        self.hand = hand
+        self.sentCards = sentCards
+        self.receivedCards = receivedCards
  
 class PassCompleteAcceptanceRequestEvent(Event):
-    def __init__(self):
+    def __init__(self, hand):
         self.name = 'Pass Complete Acknowledgement Request'
+        self.hand = hand
         
 class TrickAcceptanceRequestEvent(Event):
     def __init__(self):
@@ -173,8 +188,10 @@ class UIGameController():
                 if self.model.gameStatus == 'AwaitingPlay':
                     self.evManager.post(TrickAcceptanceRequestEvent())
 
-                if self.model.gameStatus == 'PassCards' and self.model.isPassComplete:
-                    self.evManager.post(PassCompleteAcceptanceRequestEvent())
+                if self.model.isPassComplete:
+                    for handWIDGET in self.view.handWIDGETS:
+                        if handWIDGET.hand.passStatus == 'Submitted':                        
+                            self.evManager.post(PassCompleteAcceptanceRequestEvent(handWIDGET.hand))
                     
                 pos = pygame.mouse.get_pos()
                 
@@ -182,7 +199,7 @@ class UIGameController():
                 for handWIDGET in self.view.handWIDGETS:
                     selectedCards = handWIDGET.cardWIDGETS.get_sprites_at(pos)
                     if selectedCards:
-                        if self.model.gameStatus == 'PassCards' and handWIDGET.hand.passComplete:
+                        if self.model.gameStatus == 'PassCards' and handWIDGET.hand.passStatus != 'Initiated':
                             continue
                         
                         card = selectedCards[-1].card
@@ -194,10 +211,9 @@ class UIGameController():
                 if rect.collidepoint(pos):
                     for handWIDGET in self.view.handWIDGETS:
                         if handWIDGET.getSelectedCards():
-                            if self.model.gameStatus == 'PassCards':
-                                if not handWIDGET.hand.passComplete:
-                                    ev = CardPlayRequestEvent(handWIDGET.hand, handWIDGET.getSelectedCards())
-                                    self.evManager.post(ev)         
+                            if self.model.gameStatus == 'PassCards' and handWIDGET.hand.passStatus == 'Initiated':
+                                ev = CardPassRequestEvent(handWIDGET.hand, handWIDGET.getSelectedCards())
+                                self.evManager.post(ev)         
                             
                             if self.model.gameStatus == 'AwaitingPlay':
                                 ev = CardPlayRequestEvent(handWIDGET.hand, handWIDGET.getSelectedCards())

@@ -9,6 +9,7 @@ from Team import Team
 from Game import GameMaster, InvalidCardException
 from GameController import *
 
+
 class Hearts(GameMaster):
     '''
     classdocs
@@ -30,23 +31,12 @@ class Hearts(GameMaster):
                 GameMaster.notify(self, event)
             else:
                 self.gameStatus = 'PassCards'
-                #implement pass functionality
-                #when pass is complete set flag and re-trigger RoundInitialized Event
         
-        elif isinstance(event, CardPlayRequestEvent):
-            if self.getGameStatus() == 'AwaitingPlay':
-                self.playCard(event.hand, event.selectedCards)
-            elif self.getGameStatus() == 'PassCards':
-                self.passCards(event.hand, event.selectedCards)
+        elif isinstance(event, CardPassRequestEvent):
+            self.submitHandPassCards(event.hand, event.selectedCards)
                 
-        elif isinstance(event, CardPlayedEvent):
-            if self.gameStatus == 'AwaitingPlay':
-                if not self.heartsBroken and event.card.getSuit() == 'H':
-                    self.heartsBroken = True
-                    
-            GameMaster.notify(self, event)
-
         elif isinstance(event, PassCompleteAcceptanceRequestEvent):
+            event.hand.passStatus = 'Complete'
             self.evManager.post(RoundInitializedEvent())
             
         else:
@@ -93,55 +83,51 @@ class Hearts(GameMaster):
     def isFirstPlay(self):
         return len(self.board.cards) == 0
     
-    def passCards(self, hand, cards):
-        if len(cards) != 3:
-                self.evManager.post(UserInputErrorEvent('Incorrect number of cards provided'))
-                return
+    def passCards(self):
+        if len([hand for hand in self.hands if hand.passStatus == 'Submitted']) == 4:
             
-        hand.passComplete = True 
-        hand.setPassedCards(cards)
-        if len([hand for hand in self.hands if hand.passComplete]) == 4:
-
             #Send passedCard to each user
             for hand in self.hands:
                 fromPlayer = self.getPassFromHand(hand)
+                hand.setReceivedCards(fromPlayer.getPassedCards())
                 for removedCard, addedCard in zip(hand.passedCards, fromPlayer.passedCards):
                     hand.cards.remove(removedCard)
                     hand.cards.append(addedCard)
                 hand.sortHand()
+                self.evManager.post(PassCompleteEvent(hand, hand.passedCards, fromPlayer.passedCards))
             
             #Update post pass data
             self.set2ClubPlayOrder()
             self.isPassComplete = True
-            self.evManager.post(PassCompleteEvent())
+            self.gameStatus = 'AwatingPlay'
 
     def postDealInitialization(self):
         self.set2ClubPlayOrder()
- 
-    def set2ClubPlayOrder(self):
-        for hand in self.hands:
-            if hand.hasCard(Card('2','C')):
-                self.setPlayOrder(hand)
-                break
  
     def postPlayProcessing(self, hand, card):
         if not self.heartsBroken and card.getSuit() == 'H':
             self.heartsBroken = True
  
-        
     def preDealInitialization(self):
         for hand in self.hands:
             hand.score.roundScore = 0
             hand.score.roundPointsTaken = False
         self.heartsBroken = False
-        self.passComplete = False
+        
+        # Initialized pass cards
         self.currentRoundPassType = self.getNextPassType()
         if self.currentRoundPassType == 'Keeper':
             self.passComplete = True
+            for hand in self.hands:
+                self.passStatus = 'Complete'
+        else:
+            self.passComplete = True
+            for hand in self.hands:
+                hand.passStatus = 'Initiated'            
         for hand in self.hands:
-            hand.passedCards.clear()        
-            
-       
+            hand.passedCards.clear()
+            hand.receivedCards.clear()        
+               
     def scoreTrick(self, playOrder):
         winner = self.determineTrickWinner(playOrder)
         points = self.computeTrickPoints()
@@ -151,7 +137,7 @@ class Hearts(GameMaster):
     def selectCard(self, card, hand, selectedCards):
         if self.gameStatus == 'PassCards':
             #Once you've accepted pass complete, can't try to pass more cards
-            if hand.passComplete:
+            if hand.passStatus == 'Submitted':
                 return
             
             replacedCard = None
@@ -163,6 +149,22 @@ class Hearts(GameMaster):
         else:
             GameMaster.selectCard(self, card, hand, selectedCards)
         
+    def set2ClubPlayOrder(self):
+        for hand in self.hands:
+            if hand.hasCard(Card('2','C')):
+                self.setPlayOrder(hand)
+                break
+ 
+    def submitHandPassCards(self, hand, cards):
+        if len(cards) != 3:
+                self.evManager.post(UserInputErrorEvent('Incorrect number of cards provided'))
+                return
+            
+        hand.passStatus = 'Submitted' 
+        hand.setPassedCards(cards)
+        self.evManager.post(CardPassLockEvent(hand, cards))
+        
+        self.passCards()
     
     def updateGameScore(self):
         for hand in self.hands:
