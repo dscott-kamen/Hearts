@@ -38,7 +38,8 @@ class GameMaster():
             self.selectCard(event.card, event.hand, event.selectedCards)
 
         elif isinstance(event, GameInitializedEvent):
-            self.initializeRound()
+#            self.initializeRound()
+            pass
             
         elif isinstance(event, RoundCompleteEvent):
             self.initializeRound()
@@ -51,6 +52,9 @@ class GameMaster():
             
         elif isinstance(event, TrickCompleteEvent):
             self.initializeTrick(event.winner)
+
+        elif isinstance(event, HandRequestEvent):
+            self.processHandRequest(event.playerName, event.position)
 
     def createHand(self, name, score=None, inputString=None):
         return Hand(name, score, inputString)
@@ -190,6 +194,30 @@ class GameMaster():
     def preDealInitialization(self):
         pass
     
+    def processHandRequest(self, playerName, position):
+        if position is None:
+            for i, hand in enumerate(self.hands):
+                if not hand.occupied:
+                    position = i
+                    break
+            
+            found = False
+            if position is not None:     
+                if not self.hands[position].occupied:
+                    found = True
+                    self.hands[position].occupied = True
+                    self.hands[position].name = playerName
+            
+            
+            if found:
+                self.evManager.post(HandRequestResponseEvent(position, self.hands, self.board))
+                if len([hand.occupied for hand in self.hands if hand.occupied]) == 1:
+                    self.startGame()
+            else:
+                position = -1
+                self.evManager.post(HandRequestResponseEvent(position))
+                    
+                    
     def processTrick(self):
             
         if self.isTrickComplete():            
@@ -240,6 +268,9 @@ class GameMaster():
         firstHandIndex = self.hands.index(firstHand)
         self.playOrder = self.hands[firstHandIndex:] + self.hands[:firstHandIndex]
             
+    def startGame(self):
+        self.initializeRound()
+    
     def validatePlay(self, hand, cards):
         pass
 
@@ -250,6 +281,9 @@ class Hand():
         self.cards = []
         if inputString != None: self.addCardsFromString(inputString)
         self.name = str(name)
+        self.occupied = False
+        self.humanPlayer = True
+        
         if score == None:
             self.score = Score()
         else:

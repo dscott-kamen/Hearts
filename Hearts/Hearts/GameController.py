@@ -102,7 +102,7 @@ class PassCompleteEvent(Event):
         self.hand = hand
         self.sentCards = sentCards
         self.receivedCards = receivedCards
- 
+
 class TrickCompleteEvent(Event):
     def __init__(self, winner):
         Event.__init__(self)
@@ -135,6 +135,21 @@ class GameInitializedEvent(Event):
     def __init__(self, hands, board):
         Event.__init__(self)
         self.name = 'Game Initialized'
+        self.hands = hands
+        self.board = board
+
+class HandRequestEvent(Event):
+    def __init__(self, playerName, position=None):
+        Event.__init__(self)
+        self.name = 'Hand Request'
+        self.playerName = playerName
+        self.position = position
+
+class HandRequestResponseEvent(Event):
+    def __init__(self, position, hands=None, board=None):
+        Event.__init__(self)
+        self.name = 'Hand Request Response'
+        self.position = position
         self.hands = hands
         self.board = board
   
@@ -214,8 +229,9 @@ class UIGameController():
 
                 if self.model.isPassComplete:
                     for handWIDGET in self.view.handWIDGETS:
-                        if handWIDGET.hand.passStatus == 'Submitted':                        
-                            self.evManager.post(PassCompleteAcceptanceRequestEvent(handWIDGET.hand))
+                        hand = self.model.hands[handWIDGET.position]
+                        if hand.passStatus == 'Submitted':                        
+                            self.evManager.post(PassCompleteAcceptanceRequestEvent(hand))
                     
                 pos = pygame.mouse.get_pos()
                 
@@ -223,24 +239,28 @@ class UIGameController():
                 for handWIDGET in self.view.handWIDGETS:
                     selectedCards = handWIDGET.cardWIDGETS.get_sprites_at(pos)
                     if selectedCards:
-                        if self.model.gameStatus == 'PassCards' and handWIDGET.hand.passStatus != 'Initiated':
+                        hand = self.model.hands[handWIDGET.position]
+                        if self.model.gameStatus == 'PassCards' and hand.passStatus != 'Initiated':
                             continue
                         
                         card = selectedCards[-1].card
-                        self.evManager.post(CardSelectionRequestEvent(card, handWIDGET.hand, handWIDGET.getSelectedCards()))
+                        selectedCards = [cardWIDGET.card for cardWIDGET in handWIDGET.cardWIDGETS if cardWIDGET.selected]
+                        self.evManager.post(CardSelectionRequestEvent(card, hand, selectedCards))
                         return True
 
                 #User select board to acknowledge trick, pass cards
                 rect = Rect(155, 155, 490, 290)
                 if rect.collidepoint(pos):
                     for handWIDGET in self.view.handWIDGETS:
-                        if handWIDGET.getSelectedCards():
-                            if self.model.gameStatus == 'PassCards' and handWIDGET.hand.passStatus == 'Initiated':
-                                ev = CardPassRequestEvent(handWIDGET.hand, handWIDGET.getSelectedCards())
+                        selectedCards = [cardWIDGET.card for cardWIDGET in handWIDGET.cardWIDGETS if cardWIDGET.selected]
+                        if selectedCards:
+                            hand = self.model.hands[handWIDGET.position]
+                            if self.model.gameStatus == 'PassCards' and hand.passStatus == 'Initiated':
+                                ev = CardPassRequestEvent(hand, selectedCards)
                                 self.evManager.post(ev)         
                             
                             if self.model.gameStatus == 'AwaitingPlay':
-                                ev = CardPlayRequestEvent(handWIDGET.hand, handWIDGET.getSelectedCards())
+                                ev = CardPlayRequestEvent(hand, selectedCards)
                                 self.evManager.post(ev)         
                                 
         return True
