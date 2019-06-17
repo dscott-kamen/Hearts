@@ -9,13 +9,13 @@ from Team import Team
 import importlib
 import math
 import random
-
+import copy
 
         
 class InvalidCardException(Exception):
     pass
 
-class GameMaster():
+class Game():
     
     MAXSCORE = 500
     
@@ -32,32 +32,36 @@ class GameMaster():
     def notify(self, event):
         
         if isinstance(event, CardPlayRequestEvent):
-            self.playCard(event.hand, event.selectedCards)
+            hand = self.hands[event.handPosition]
+            self.playCard(hand, event.selectedCards)
         
         elif isinstance(event, CardSelectionRequestEvent):
-            self.selectCard(event.card, event.hand, event.selectedCards)
-
-        elif isinstance(event, GameInitializedEvent):
-#            self.initializeRound()
-            pass
+            hand = self.hands[event.handPosition]
+            self.selectCard(hand, event.card)
             
-        elif isinstance(event, RoundCompleteEvent):
-            self.initializeRound()
-            
-        elif isinstance(event, RoundInitializedEvent):
-            self.initializeTrick()
+        elif isinstance(event, GameUpdateRequestEvent):
+            self.getGameInfo()
             
         elif isinstance(event, TrickAcceptanceRequestEvent):
             self.processTrick()
             
-        elif isinstance(event, TrickCompleteEvent):
-            self.initializeTrick(event.winner)
+#        elif isinstance(event, HandRequestEvent):
+#            self.processHandRequest(event.playerName, event.position)
 
-        elif isinstance(event, HandRequestEvent):
-            self.processHandRequest(event.playerName, event.position)
+    def autoPlay(self):
+        currentHand = self.getTurn()
+        if currentHand is not None and isinstance(currentHand.player, ComputerPlayer):
+            while 1:
+                try:
+                    cards = currentHand.player.autoPlayCard(currentHand, self.getPlayableCards(currentHand), 1)
+                    self.playCard(currentHand, cards)
+                except InvalidCardException:
+                    continue
+                break
+                    
 
-    def createHand(self, name, score=None, inputString=None):
-        return Hand(name, score, inputString)
+    def createHand(self, name, score=None, inputString=None, position=None):
+        return Hand(name, score, inputString, position)
 
     def createScore(self):
         return Score()
@@ -65,11 +69,26 @@ class GameMaster():
     def deal(self):
         Deck().deal(self.playOrder)
 
+    def finalizeGame(self):
+        pass
+
     def getFirstPlayer(self):
         lookup = self.hands + self.hands
         dealIndex = lookup.index(self.dealer)
         return lookup[dealIndex+1]
         
+    def getGameStatus(self):
+        return self.gameStatus
+
+    def _copyGame(self):
+        game = copy.copy(self)
+        game.board = copy.deepcopy(self.board)
+        game.hands = copy.deepcopy(self.hands)
+        return game
+        
+    def getGameInfo(self):
+        self.evManager.post(GameUpdateEvent(self._copyGame()))
+
     def getPlayableCards(self, hand):
          
         playableCards = []
@@ -78,7 +97,9 @@ class GameMaster():
                 self.validatePlay(hand, card)
                 playableCards.append(card)
             except InvalidCardException:
-                continue            
+                continue    
+        
+        return playableCards
 
     def getPlayers(self, numPlayers, numTeams=None):
         
@@ -98,8 +119,6 @@ class GameMaster():
     def getPlayOrder(self):
         return self.playOrder
         
-    def getGameStatus(self):
-        return self.gameStatus
     
     def getTurn(self):
         if len(self.board.cards) < len(self.playOrder):
@@ -109,30 +128,29 @@ class GameMaster():
 
     def initializeGame(self, players):
         self.initializeSeats(players)
-        self.evManager.post(GameInitializedEvent(self.hands, self.board))
+        self.playOrder = self.hands
                     
     def initializeRound(self):
         if self.isGameComplete():
-            self.evManager.post(GameCompleteEvent())
+            self.finalizeGame()
         else:
             self.setDealer()
             self.setPlayOrder(self.getFirstPlayer())
             self.preDealInitialization()
             
-            self.deal()
-            
+            self.deal()            
             self.postDealInitialization()
-            self.evManager.post(RoundInitializedEvent())
 
     def initializeTrick(self, winner=None):
         if self.isRoundComplete():
-            self.evManager.post(RoundCompleteEvent())
+            self.initializeRound()
         else:
             self.board.cards.clear()
             if winner is not None:
                 self.setPlayOrder(winner)
             self.gameStatus = 'AwaitingPlay'
-            self.evManager.post(TrickInitializedEvent(self.playOrder, self.getTurn()))
+            self.evManager.post(GameUpdateEvent(self._copyGame()))
+            self.autoPlay()
     
     def initializeSeats(self, players):
         
@@ -144,7 +162,7 @@ class GameMaster():
             
         #Set teams and hands
         for i, player in enumerate(players):
-            hand = self.createHand(player, score=self.createScore())
+            hand = self.createHand(player, score=self.createScore(), position=i)
             self.hands.append(hand)
             if self.numTeams and self.numPlayers != self.numTeams:
                 if i < self.numTeams:
@@ -160,17 +178,20 @@ class GameMaster():
     def isTrickComplete(self):
         return len(self.board.cards) == len(self.playOrder)
 
+
     def playCard(self, hand, cards):
-        
-        if len(cards) != self.getCardCountToPlay():
+        if isinstance(cards, list):
+            if len(cards) != 1:
                 self.evManager.post(UserInputErrorEvent('Incorrect number of cards provided'))
                 return
             
-        card = cards[0]
+            card = cards[0]
+
         if self.getTurn() != hand:
             self.evManager.post(UserInputErrorEvent('It is not your turn'))
             return
-    
+        
+        #card = hand.selectedCards[0]
         try:
             self.validatePlay(hand, card)
         except InvalidCardException as message:
@@ -179,45 +200,25 @@ class GameMaster():
                 
         self.board.addCard(card, hand)
         hand.playCard(card)
+        hand.selectedCards.clear()
         self.postPlayProcessing(hand, card)
-        self.evManager.post(CardPlayedEvent(hand, card, self.getTurn()))
+        self.evManager.post(CardPlayedEvent(hand, card, self._copyGame()))
+        self.autoPlay()
+                
 
     def playGame(self):
         self.initializeRound()
 
     def postDealInitialization(self):
-        pass
+        self.initializeTrick()
+
                  
     def postPlayProcessing(self, hard, card):
         pass
     
     def preDealInitialization(self):
         pass
-    
-    def processHandRequest(self, playerName, position):
-        if position is None:
-            for i, hand in enumerate(self.hands):
-                if not hand.occupied:
-                    position = i
-                    break
-            
-            found = False
-            if position is not None:     
-                if not self.hands[position].occupied:
-                    found = True
-                    self.hands[position].occupied = True
-                    self.hands[position].name = playerName
-            
-            
-            if found:
-                self.evManager.post(HandRequestResponseEvent(position, self.hands, self.board))
-                if len([hand.occupied for hand in self.hands if hand.occupied]) == 1:
-                    self.startGame()
-            else:
-                position = -1
-                self.evManager.post(HandRequestResponseEvent(position))
-                    
-                    
+
     def processTrick(self):
             
         if self.isTrickComplete():            
@@ -228,11 +229,34 @@ class GameMaster():
                 self.updateGameScore()
 
             self.gameStatus = 'Scoring Trick'
-            self.evManager.post(TrickCompleteEvent(winner))
+            self.evManager.post(TrickCompleteEvent(winner, self._copyGame()))
+            self.initializeTrick(winner)
+        
+    def requestHand(self, player, position=None):
+        if position is None:
+            for i, hand in enumerate(self.hands):
+                if not hand.occupied:
+                    position = i
+                    break
             
-            return winner
+        found = False
+        if position is not None:     
+            if not self.hands[position].occupied:
+                found = True
+                self.hands[position].occupied = True
+                self.hands[position].name = player.name
+                self.hands[position].player = player
+            
+            
+        if found:
+#            self.evManager.post(HandRequestResponseEvent(position, self))
+            if len([hand.occupied for hand in self.hands if hand.occupied]) == 4:
+                self.startGame()
         else:
-            return None
+            position = -1
+#            self.evManager.post(HandRequestResponseEvent(position))
+                    
+        return position
         
     def scoreRound(self):
         raise RuntimeError("Must be implemented in subclass")
@@ -240,7 +264,7 @@ class GameMaster():
     def scoreTrick(self, playOrder):
         raise RuntimeError("Must be implemented in subclass")
 
-    def selectCard(self, card, hand, selectedCards):
+    def selectCard(self, hand, card):
         #Ignore selection request if its not your turn
         if hand != self.getTurn():
             return
@@ -250,11 +274,13 @@ class GameMaster():
         except InvalidCardException as message:
             self.evManager.post(UserInputErrorEvent(message.args[0]))
             return
-        
+
         replacedCard = None
-        if card not in selectedCards and len(selectedCards) == 1:
-            replacedCard = selectedCards[0]
-        ev = CardSelectedEvent(card, hand, replacedCard)
+        if card not in hand.selectedCards and len(hand.selectedCards) == 1:
+            replacedCard = hand.selectedCards[0]
+        hand.toggleSelectedCard(card, replacedCard)
+    
+        ev = CardSelectedEvent(hand, card, self._copyGame())
         self.evManager.post(ev)
     
     def setDealer(self):
@@ -269,20 +295,28 @@ class GameMaster():
         self.playOrder = self.hands[firstHandIndex:] + self.hands[:firstHandIndex]
             
     def startGame(self):
+        for hand in self.hands:
+            if not hand.occupied:
+                hand.player = ComputerPlayer()
+                hand.occupied = True
         self.initializeRound()
     
     def validatePlay(self, hand, cards):
         pass
-
+   
+   
+   
 
 class Hand():
     
-    def __init__(self, name=None, score=None, inputString=None):
+    def __init__(self, name=None, score=None, inputString=None, position=None):
         self.cards = []
         if inputString != None: self.addCardsFromString(inputString)
         self.name = str(name)
         self.occupied = False
-        self.humanPlayer = True
+        self.player = None
+        self.selectedCards = []
+        self.position = position
         
         if score == None:
             self.score = Score()
@@ -299,47 +333,46 @@ class Hand():
     def getName(self):
         return self.name
 
-    def getCard(self, playableCards, promptMessage):
-        return self.getCards(playableCards, 1, promptMessage)[0]
-    
-    def getCards(self, playableCards, numCards, promptMessage):
-        
-        while 1:
-            usrInput = input(promptMessage).upper().split()
-   
-            if len(usrInput) != numCards:
-                print('Wrong number of cards provided.  Please re-enter.')
-                continue
-            
-            cards = []
-            validInput = True
-            while validInput:
-                for token in usrInput: 
-                
-                    #Convert input into a card
-                    try:
-                        card = Card(token[0], token[1])
-                        if not self.hasCard(card):
-                            print('%s, %s%s is not in your hand.  Please re-enter.\n' % (self.getName(), card.getValue(), card.getSuit()))
-                            validInput = False
-                            return None
-                            break
-                    except:
-                        validInput = False
-                        print('%s, %s is not a valid card. Please re-enter.\n' % (self.getName(), usrInput))
-                        return None
-                        break
-
-                    if card not in playableCards:
-                        print('%s, %s%s is not a valid play.  Please re-enter.\n' % (self.getName(), card.getValue(), card.getSuit()))
-                        validInput = False
-                        break
-                    
-                    cards.append(card) 
-                       
-                break
-
-            return cards
+    def getCards(self, playableCards, numCards):
+        pass
+#     def getCards(self, playableCards, numCards, promptMessage):
+#         
+#         while 1:
+#             usrInput = input(promptMessage).upper().split()
+#    
+#             if len(usrInput) != numCards:
+#                 print('Wrong number of cards provided.  Please re-enter.')
+#                 continue
+#             
+#             cards = []
+#             validInput = True
+#             while validInput:
+#                 for token in usrInput: 
+#                 
+#                     #Convert input into a card
+#                     try:
+#                         card = Card(token[0], token[1])
+#                         if not self.hasCard(card):
+#                             print('%s, %s%s is not in your hand.  Please re-enter.\n' % (self.getName(), card.getValue(), card.getSuit()))
+#                             validInput = False
+#                             return None
+#                             break
+#                     except:
+#                         validInput = False
+#                         print('%s, %s is not a valid card. Please re-enter.\n' % (self.getName(), usrInput))
+#                         return None
+#                         break
+# 
+#                     if card not in playableCards:
+#                         print('%s, %s%s is not a valid play.  Please re-enter.\n' % (self.getName(), card.getValue(), card.getSuit()))
+#                         validInput = False
+#                         break
+#                     
+#                     cards.append(card) 
+#                        
+#                 break
+# 
+#             return cards
         
     def hasSuit(self, suit):
         return len([card for card in self.card if card.suit == suit]) > 0
@@ -352,23 +385,47 @@ class Hand():
     
     def sortHand(self):
         self.cards = sorted(self.cards, key=lambda Card: (Card.suit, Card.getRank()))
-        
-    def __str__(self):
-        return ' '.join((str(card) for card in self.cards))
-    
-    def __len__(self):
-        return len(self.cards)
 
     def __getitem__(self, index):
         return self.cards[index]
     
+    def __len__(self):
+        return len(self.cards)
+
     def __setitem__(self, index, value):
         self.cards[index] = value
 
+    def __str__(self):
+        return ' '.join((str(card) for card in self.cards))
+    
+class Player():
+    def __init__(self, name):
+        self._name = name
+        self._position = ''
+    
+    @property
+    def name(self): return self._name   
+    @property
+    def position(self): return self._position
 
+    @name.setter
+    def name(self, name):
+        self._name = name
 
+    @position.setter
+    def position(self, position):
+        self._position = position
+
+class ComputerPlayer(Player):
+    def __init__(self):
+        Player.__init__(self, "Computer")
         
-        
+    def autoPlayCard(self, hand, playableCards, numCards):
+        return self.randomCardSelector(playableCards, numCards)
+    
+    def randomCardSelector(self, playableCards, numCards):
+        return random.sample(playableCards, numCards)
+    
 class Board():
     def __init__(self, name=None, inputString=None):
         Hand.__init__(self, name, inputString)
@@ -411,6 +468,7 @@ class Deck:
             
     def getNextCard(self):
         return self.cards.pop()
+
 
 
 class Card:

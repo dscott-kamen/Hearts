@@ -7,15 +7,15 @@ Created on Apr 21, 2019
 from Hand import Hand
 from Deck import Card, Deck
 from Team import Team 
-from Game import GameMaster
+from Game import Game
 import math
-class Spades(GameMaster):
+class Spades(Game):
     
     def __init__(self, args):
         self.numPlayers = 4
         self.numTeams = 2
         self.maxScore = 100
-        GameMaster.__init__(self, args)
+        Game.__init__(self, args)
 
     def getBids(self, playOrder):
         
@@ -54,7 +54,7 @@ class Spades(GameMaster):
         
     def initializeGame(self, args):
 
-        GameMaster.initializeGame(self, args)
+        Game.initializeGame(self, args)
         self.tricksBid = [0 for hand in self.hands]
         self.bags = [0 for hand in self.hands]
         self.totalScore = [0 for hand in self.teams]

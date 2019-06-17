@@ -2,6 +2,8 @@ import os, pygame
 from Hearts import *
 from GameController import *
 from resource import *
+#from Game import Player
+import threading
 
 
 SCR_ATTR = {
@@ -22,7 +24,6 @@ SCR_ATTR = {
             'notificationHeight' : 20,
             'cardSelectionSpacing' : 30}
 
-RECT_LOOKUP = {}
 SURFACE_LOOKUP = {}
 
 class NotificationWIDGET(pygame.Surface):
@@ -88,8 +89,8 @@ class CardWIDGET(pygame.sprite.Sprite):
     def cardLabel(self): return self._card
     @property        
     def highlighted(self): return self._highlighted    
-    @property
-    def position(self): return self._position    
+#    @property
+#    def position(self): return self._position    
     @property
     def rotation(self): return self._rotation    
     @property   
@@ -105,9 +106,9 @@ class CardWIDGET(pygame.sprite.Sprite):
         if self.highlighted and self.showFront:
             self.image = self._applyColor(self.image)
 
-    @position.setter
-    def position(self, position):
-        self._position = position
+#    @position.setter
+#    def position(self, position):
+#        self._position = position
 
     @rotation.setter
     def rotation(self, value):
@@ -163,17 +164,16 @@ class CardWIDGET(pygame.sprite.Sprite):
 class ScoreAreaWIDGET(pygame.Surface):
     def __init__(self, seatLabel, rotation):
         self._seatLabel = seatLabel
-        self._currentTurn = False
+        self._colorLabel = 'scoreAreaColor'
         self._changed = True
         self._rotation = rotation
         self._nameText = ''
         self._scoreText = ''
-        self._position = -1
 
         rect = RECT_LOOKUP['TopLevel', ('ScoreArea', seatLabel)]
         pygame.Surface.__init__(self, rect.size)
 
-        self.fill((self._getScoreAreaColor()))
+        self.fill(SCR_ATTR[self.colorLabel])
             
         rect = RECT_LOOKUP[('TopLevel', ('ScoreArea', self.seatLabel))]
         pygame.draw.rect(self, SCR_ATTR['rectangleColor'], self.get_rect(), 1)
@@ -181,11 +181,9 @@ class ScoreAreaWIDGET(pygame.Surface):
     @property 
     def changed(self): return self._changed
     @property
-    def currentTurn(self): return self._currentTurn 
+    def colorLabel(self): return self._colorLabel 
     @property
     def nameText(self): return self._nameText
-    @property
-    def position(self): return self._position
     @property
     def rotation(self): return self._rotation
     @property
@@ -193,9 +191,9 @@ class ScoreAreaWIDGET(pygame.Surface):
     @property
     def seatLabel(self): return self._seatLabel
                     
-    @currentTurn.setter
-    def currentTurn(self, flag):
-        self._currentTurn = flag   
+    @colorLabel.setter
+    def colorLabel(self, colorLabel):
+        self._colorLabel = colorLabel   
         self._changed = True
         
     @nameText.setter
@@ -203,10 +201,6 @@ class ScoreAreaWIDGET(pygame.Surface):
         self._nameText = text
         self._changed = True
         
-    @position.setter
-    def position(self, value):
-        self._position = value
-
     @rotation.setter
     def rotation(self, value):
         self._rotation = value
@@ -218,7 +212,7 @@ class ScoreAreaWIDGET(pygame.Surface):
         
     def draw(self):
         if self._changed:
-            self.fill((self._getScoreAreaColor()))
+            self.fill(SCR_ATTR[self.colorLabel])
             
             rect = RECT_LOOKUP[('TopLevel', ('ScoreArea', self.seatLabel))]
             pygame.draw.rect(self, SCR_ATTR['rectangleColor'], self.get_rect(), 1)
@@ -246,12 +240,6 @@ class ScoreAreaWIDGET(pygame.Surface):
         text = font.render(self.scoreText, 1, (10, 10, 10))
         return self._transformScoreText(text)
     
-    def _getScoreAreaColor(self):
-            if self.currentTurn:
-                return SCR_ATTR['scoreAreaCurrentTurnColor']
-            else:
-                return SCR_ATTR['scoreAreaColor']
-        
     def _transformNameText(self, text):
         if self.rotation==0: #top/bottom
             return text, text.get_rect(midleft=(5,self.get_rect().height/2))
@@ -274,7 +262,7 @@ class ScoreAreaWIDGET(pygame.Surface):
  
 
 class Animation():
-    def __init__(self, animationType, widget, moveSpeed, startRect, endRect=None, redrawWIDGETS=None):
+    def __init__(self, animationType, widget, moveSpeed, startRect, endRect=None, redrawWIDGETS=None, callback=None):
         self.animationType = animationType
         self.WIDGET = widget
         self.currentPos = startRect.topleft  
@@ -282,6 +270,7 @@ class Animation():
         self.endPos = endRect.topleft
         self.redrawWIDGETS = redrawWIDGETS
         self.moveXY = calculateMoveXY(startRect, endRect, moveSpeed)
+        self.callback = callback
     
     def getRect(self):
         return Rect(self.currentPos + self.WIDGET.get_rect().size)
@@ -312,7 +301,6 @@ class HandWIDGET(pygame.Surface):
         self._cardWIDGETS = pygame.sprite.LayeredUpdates()
         self._seatLabel = seatLabel
         self._rotation = rotation
-        self._position = -1
 
         self._setChanged(True)        
 
@@ -331,8 +319,6 @@ class HandWIDGET(pygame.Surface):
     @property
     def cardWIDGETS(self): return self._cardWIDGETS
     @property 
-    def position(self): return self._position
-    @property 
     def rotation(self): return self._rotation
     @property
     def seatLabel(self): return self._seatLabel
@@ -345,10 +331,6 @@ class HandWIDGET(pygame.Surface):
         for cardWIDGET in cardWIDGETS:
             self._cardWIDGETS.add(cardWIDGET)
             
-    @position.setter
-    def position(self, value):
-        self._position = value
-
     @rotation.setter
     def rotation(self, value):
         self._rotation = value
@@ -381,10 +363,6 @@ class HandWIDGET(pygame.Surface):
         self._setChanged(True)
         self._clearCardArea()
         
-    def removeCardWIDGET(self, cardWIDGET):
-        self._setChanged(True)
-        self.cardWIDGETS.remove(cardWIDGET)
-        
     def _clearCardArea(self):
         background = SURFACE_LOOKUP['Background']
         self.blit(background, self.get_rect())
@@ -414,7 +392,7 @@ class HandWIDGET(pygame.Surface):
             return self.parentRect.width
         else:
             return self.parentRect.height
-
+    
     def _setChanged(self, value):
         self._changed = value
             
@@ -437,15 +415,14 @@ class BoardWIDGET(pygame.Surface):
     def playOrder(self): return self._playOrder
     
     @cardWIDGETS.setter
-    def cardWIDGETS(self, cards):
+    def cardWIDGETS(self, cardWIDGETS):
         self._clearBoard()
         self._setChanged(True)
-        for cardWIDGET in self._cardWIDGETS:
+        
+        self.cardWIDGETS.clear()
+        for cardWIDGET in cardWIDGETS:
             self._cardWIDGETS.append(cardWIDGET)
       
-    def addCardWIDGET(self, cardWIDGET):
-        self.cardWIDGETS.append(cardWIDGET)
-        
     def clearCards(self):
         self._setChanged(True)
         self.cardWIDGETS.clear()
@@ -458,13 +435,13 @@ class BoardWIDGET(pygame.Surface):
                     self.blit(cardWIDGET.image, self._getCardRect(seatLabel))
             self._setChanged(False)
                     
+    def redraw(self):
+        self._setChanged(True)
+    
     def setPlayOrder(self, seatLabels):
         self._setChanged(True)
         self._playOrder = seatLabels
         
-    def redraw(self):
-        self._setChanged(True)
-    
     def _clearBoard(self):
         background = SURFACE_LOOKUP['Background']
         self.blit(background, self.get_rect())
@@ -480,7 +457,7 @@ class BoardWIDGET(pygame.Surface):
 
         
 class Gui():
-    def __init__(self, name):
+    def __init__(self, player):
 
         self.seatLabels = ['Bottom', 'Left', 'Top', 'Right']
         self.rotation = [0, -90, 0, 90]
@@ -488,10 +465,13 @@ class Gui():
         self._handWIDGETS = []
         self._scoreAreaWIDGETS = []
         self.currentPosition = -1
-        self.name = name
+#        self.name = name
+        self.player = player
+        self.defaultNames = [player.name, 'Player1', 'Player2', 'Player3']
+        self.gameInitialized = False
 
         #Draw initial screen
-        DataPrep()._initializeRects()
+        DataPrep()
         self._initialize()
         DataPrep()._preloadCardImages()        
 
@@ -537,6 +517,14 @@ class Gui():
         
         pygame.display.flip()
 
+    def redraw(self):
+        for handWIDGET, scoreAreaWIDGET in zip(self.handWIDGETS, self.scoreAreaWIDGETS):
+            handWIDGET.redraw()
+            scoreAreaWIDGET.redraw()
+        self.boardWIDGET.redraw()
+        self.notificationAreaWIDGET.redraw()
+        
+
     def _clearAnimations(self):
         for anima in self.animations:    
             rect = anima.getRect()
@@ -551,7 +539,8 @@ class Gui():
                 pygame.display.get_surface().blit(anima.WIDGET, rect)
             else:
                 self.animations.remove(anima)
-                self._postAnimationProcessing(anima)
+                if anima.callback is not None:
+                    anima.callback(anima)
 
     def _drawBoard(self):
         if self.boardWIDGET.changed:
@@ -561,7 +550,7 @@ class Gui():
 
         
     def _drawHands(self):
-        for handWIDGET in self.handWIDGETS:
+        for handWIDGET in self.handWIDGETS[::-1]:
             if handWIDGET.changed:
                 rect = RECT_LOOKUP[('TopLevel', ('Hand', handWIDGET.seatLabel))]
                 handWIDGET.draw()
@@ -622,29 +611,14 @@ class Gui():
             self.scoreAreaWIDGETS.append(scoreAreaWIDGET)
         
         self.boardWIDGET = BoardWIDGET()
+        self.boardWIDGET.setPlayOrder(self.seatLabels) 
 
         #Setup notification area
         self.notificationAreaWIDGET = NotificationWIDGET()
 
         self.draw()
         pygame.display.flip()
-
         
-    def _postAnimationProcessing(self, anima):
-
-        if anima.animationType == 'PlayCard':
-            for cardWIDGET in self.boardWIDGET.cardWIDGETS:
-                cardWIDGET.visible = True 
-            self.boardWIDGET.redraw()
-            self.notificationAreaWIDGET.redraw()
-
-        if anima.animationType == 'TrickWinner':
-
-            for HandWIDGET in self.handWIDGETS:
-                HandWIDGET.redraw()
-            for scoreAreaWIDGET in self.scoreAreaWIDGETS:
-                scoreAreaWIDGET.redraw()
-
     def _setAnimationRedraws(self):
         for anima in self.animations:
             for WIDGET in anima.redrawWIDGETS:
@@ -660,65 +634,67 @@ class DataPrep():
     def _getPadding(self):
         return self._getCardAreaHeight() + SCR_ATTR['scoreAreaHeight']
     
-    def _initializeRects(self):
+    def getRects(self):
 
+        rect = {}
+        
         width = SCR_ATTR['topLevelWidth']
         height = SCR_ATTR['topLevelHeight']
-        RECT_LOOKUP[('TopLevel', 'TopLevel')] = Rect(0, 0, width, height)
+        rect[('TopLevel', 'TopLevel')] = Rect(0, 0, width, height)
 
         x = self._getPadding()
         y = SCR_ATTR['scoreAreaHeight']
         width = SCR_ATTR['topLevelWidth'] - 2 * self._getPadding()
         height = self._getCardAreaHeight() + SCR_ATTR['cardSelectionSpacing']
-        RECT_LOOKUP[('TopLevel', ('Hand', 'Top'))] = Rect(x, y, width, height)
+        rect[('TopLevel', ('Hand', 'Top'))] = Rect(x, y, width, height)
 
         y = SCR_ATTR['topLevelHeight'] - self._getPadding() - SCR_ATTR['cardSelectionSpacing']
-        RECT_LOOKUP[('TopLevel', ('Hand', 'Bottom'))] = Rect(x, y, width, height)
+        rect[('TopLevel', ('Hand', 'Bottom'))] = Rect(x, y, width, height)
 
         y = 0
         height = SCR_ATTR['scoreAreaHeight']
-        RECT_LOOKUP[('TopLevel', ('ScoreArea', 'Top'))] = Rect(x, y, width, height)
+        rect[('TopLevel', ('ScoreArea', 'Top'))] = Rect(x, y, width, height)
         
         y = SCR_ATTR['topLevelHeight'] - SCR_ATTR['scoreAreaHeight']
-        RECT_LOOKUP[('TopLevel', ('ScoreArea', 'Bottom'))] = Rect(x, y, width, height)
+        rect[('TopLevel', ('ScoreArea', 'Bottom'))] = Rect(x, y, width, height)
 
         x = 0
         y = 0
         height = self._getCardAreaHeight()
-        RECT_LOOKUP[(('Hand', 'Top'), 'Rectangle')] = Rect(x, y, width, height)
+        rect[(('Hand', 'Top'), 'Rectangle')] = Rect(x, y, width, height)
         
         y = SCR_ATTR['cardSelectionSpacing']
-        RECT_LOOKUP[(('Hand', 'Bottom'), 'Rectangle')] = Rect(x, y, width, height)
+        rect[(('Hand', 'Bottom'), 'Rectangle')] = Rect(x, y, width, height)
 
         x = SCR_ATTR['scoreAreaHeight']
         y = self._getPadding()
         width = self._getCardAreaHeight() + SCR_ATTR['cardSelectionSpacing']
         height = SCR_ATTR['topLevelHeight'] - 2 * self._getPadding()         
-        RECT_LOOKUP[('TopLevel', ('Hand', 'Left'))] = Rect(x, y, width, height)
+        rect[('TopLevel', ('Hand', 'Left'))] = Rect(x, y, width, height)
         
         x = SCR_ATTR['topLevelWidth'] - self._getPadding() - SCR_ATTR['cardSelectionSpacing']
-        RECT_LOOKUP[('TopLevel', ('Hand', 'Right'))] = Rect(x, y, width, height)
+        rect[('TopLevel', ('Hand', 'Right'))] = Rect(x, y, width, height)
 
         x = 0
         width = SCR_ATTR['scoreAreaHeight']
-        RECT_LOOKUP[('TopLevel', ('ScoreArea', 'Left'))] = Rect(x, y, width, height)
+        rect[('TopLevel', ('ScoreArea', 'Left'))] = Rect(x, y, width, height)
         
         x = SCR_ATTR['topLevelWidth'] - SCR_ATTR['scoreAreaHeight']
-        RECT_LOOKUP[('TopLevel', ('ScoreArea', 'Right'))] = Rect(x, y, width, height)
+        rect[('TopLevel', ('ScoreArea', 'Right'))] = Rect(x, y, width, height)
 
         x = 0
         y = 0
         width = self._getCardAreaHeight()
-        RECT_LOOKUP[(('Hand', 'Left'), 'Rectangle')] = Rect(x, y, width, height)
+        rect[(('Hand', 'Left'), 'Rectangle')] = Rect(x, y, width, height)
 
         x = SCR_ATTR['cardSelectionSpacing']
-        RECT_LOOKUP[(('Hand', 'Right'), 'Rectangle')] = Rect(x, y, width, height)
+        rect[(('Hand', 'Right'), 'Rectangle')] = Rect(x, y, width, height)
 
         x = self._getPadding()
         y = x
         width = SCR_ATTR['topLevelWidth'] - 2*x
         height = SCR_ATTR['topLevelHeight'] - 2*y
-        RECT_LOOKUP[('TopLevel','Board')] = Rect(x, y, width, height)
+        rect[('TopLevel','Board')] = Rect(x, y, width, height)
 
 
         cardWidth = SCR_ATTR['cardWidth']
@@ -726,37 +702,39 @@ class DataPrep():
         cardSpaceHalf = SCR_ATTR['cardSpacing']/2
         cardSelectionOffset = cardSpaceHalf + SCR_ATTR['cardSelectionSpacing']
         
-        RECT_LOOKUP[(('Hand', 'Top'), 'CardNotSelected')] = Rect(cardSpaceHalf, cardSpaceHalf, cardWidth, cardHeight)
-        RECT_LOOKUP[(('Hand', 'Top'), 'CardSelected')] = Rect(cardSpaceHalf, cardSelectionOffset, cardWidth, cardHeight)
-        RECT_LOOKUP[(('Hand', 'Bottom'), 'CardNotSelected')] = Rect(cardSpaceHalf, cardSelectionOffset, cardWidth, cardHeight)
-        RECT_LOOKUP[(('Hand', 'Bottom'), 'CardSelected')] = Rect(cardSpaceHalf, cardSpaceHalf, cardWidth, cardHeight)
-        RECT_LOOKUP[(('Hand', 'Left'), 'CardNotSelected')] = Rect(cardSpaceHalf, cardSpaceHalf, cardHeight, cardWidth)
-        RECT_LOOKUP[(('Hand', 'Left'), 'CardSelected')] = Rect(cardSelectionOffset, cardSpaceHalf, cardHeight, cardWidth)
+        rect[(('Hand', 'Top'), 'CardNotSelected')] = Rect(cardSpaceHalf, cardSpaceHalf, cardWidth, cardHeight)
+        rect[(('Hand', 'Top'), 'CardSelected')] = Rect(cardSpaceHalf, cardSelectionOffset, cardWidth, cardHeight)
+        rect[(('Hand', 'Bottom'), 'CardNotSelected')] = Rect(cardSpaceHalf, cardSelectionOffset, cardWidth, cardHeight)
+        rect[(('Hand', 'Bottom'), 'CardSelected')] = Rect(cardSpaceHalf, cardSpaceHalf, cardWidth, cardHeight)
+        rect[(('Hand', 'Left'), 'CardNotSelected')] = Rect(cardSpaceHalf, cardSpaceHalf, cardHeight, cardWidth)
+        rect[(('Hand', 'Left'), 'CardSelected')] = Rect(cardSelectionOffset, cardSpaceHalf, cardHeight, cardWidth)
         y = SCR_ATTR['topLevelHeight'] - 2 * self._getPadding() - cardSpaceHalf
-        RECT_LOOKUP[(('Hand', 'Right'), 'CardSelected')] = Rect(cardSpaceHalf, y, cardHeight, cardWidth)
-        RECT_LOOKUP[(('Hand', 'Right'), 'CardNotSelected')] = Rect(cardSelectionOffset, y, cardHeight, cardWidth)
+        rect[(('Hand', 'Right'), 'CardSelected')] = Rect(cardSpaceHalf, y, cardHeight, cardWidth)
+        rect[(('Hand', 'Right'), 'CardNotSelected')] = Rect(cardSelectionOffset, y, cardHeight, cardWidth)
       
         boardWidth = SCR_ATTR['topLevelWidth'] - 2 * self._getPadding()
         boardHeight = SCR_ATTR['topLevelHeight'] - 2 * self._getPadding()      
         x = boardWidth/2 - cardWidth/2
         y = boardHeight/2 - cardHeight/2 - cardHeight/2 - 2 * cardSpaceHalf
-        RECT_LOOKUP[('Board', 'Top')] = Rect(x, y, cardWidth, cardHeight)
+        rect[('Board', 'Top')] = Rect(x, y, cardWidth, cardHeight)
         
         y = boardHeight/2 - cardHeight/2 + cardHeight/2 + 2 * cardSpaceHalf
-        RECT_LOOKUP[('Board', 'Bottom')] = Rect(x, y, cardWidth, cardHeight)
+        rect[('Board', 'Bottom')] = Rect(x, y, cardWidth, cardHeight)
 
         x =  boardWidth/2 - cardWidth/2 - cardWidth - 2*cardSpaceHalf
         y = boardHeight/2 - cardHeight/2
-        RECT_LOOKUP[('Board', 'Left')] = Rect(x, y, cardWidth, cardHeight)
+        rect[('Board', 'Left')] = Rect(x, y, cardWidth, cardHeight)
         
         x = boardWidth/2 - cardWidth/2 + cardWidth + 2*cardSpaceHalf        
-        RECT_LOOKUP[('Board', 'Right')] = Rect(x, y, cardWidth, cardHeight)
+        rect[('Board', 'Right')] = Rect(x, y, cardWidth, cardHeight)
         
         notifx, notify = SCR_ATTR['notificationPadding']
         x, y = self._getPadding() + notifx, self._getPadding() + notify
         width = SCR_ATTR['topLevelWidth'] - 2 * notifx - 2 * self._getPadding()
         height = SCR_ATTR['notificationHeight']
-        RECT_LOOKUP[('TopLevel','NotificationArea')] = Rect(x, y, width, height)
+        rect[('TopLevel','NotificationArea')] = Rect(x, y, width, height)
+        
+        return rect
 
     def _preloadCardImages(self):
         for suit in Card.SUIT:  
@@ -764,254 +742,9 @@ class DataPrep():
                 load_image('%s%s.png' % (suit, value), size=(SCR_ATTR['cardWidth'], SCR_ATTR['cardHeight']))
 
     
+RECT_LOOKUP = DataPrep().getRects()
 
-class GameController():
-    def __init__(self, gameMaster, ui, evManager):
-        self.ui = ui
-        self.gameMaster = gameMaster
-        self.evManager = evManager
-        self.evManager.registerListener(self)
 
-        self.seatLabels = ['Bottom', 'Left', 'Top', 'Right']
-        self.rotation = [0, -90, 0, 90]
-        self.handWIDGETS = []
-        self.scoreAreaWIDGETS = []
-        self.animations = []
-        self.requestHand()
-            
-    def notify(self, event):
-
-        if isinstance(event, UserEvent):
-            self.processUserEvent()
- 
-        if isinstance(event, UserInputErrorEvent):
-            self.processUserInputError(event.message)
- 
-        if isinstance(event, CardSelectedEvent):
-            self.selectCard(event.hand, event.card, event.replacedCard)
- 
-        elif isinstance(event, CardPlayedEvent):
-            self.playCard(event.hand, event.card, event.nextHand)
-         
-        elif isinstance(event, CardPassLockEvent):
-            self.lockCardPass(event.hand)
-             
-        elif isinstance(event, TrickInitializedEvent):
-            self.initializeTrick(event.nextHand)
-             
-        elif isinstance(event, TrickCompleteEvent):
-            self.finalizeTrick(event.winner)
- 
-        elif isinstance(event, RoundInitializedEvent):
-            self.initializeRound()
- 
-        elif isinstance(event, RoundCompleteEvent):
-            self.finalizeRound()
-                 
-        elif isinstance(event, PassCompleteEvent):
-            self.finalizePass(event.hand, event.sentCards, event.receivedCards)
-
-        elif isinstance(event, HandRequestResponseEvent):
-            self.setHand(event.position, event.hands, event.board)
-             
-    def requestHand(self, ):
-        if self.ui.currentPosition < 0:
-            self.evManager.post(HandRequestEvent(self.ui.name))
-              
-    def setHand(self, pos, hands, board):
-        if pos < 0:
-            self.requestHand()
-            return 
-    
-        self.ui.position = pos
-        self.currentPosition = pos
-            
-        posLookup = list(range(4)) + list(range(4))
-        handLookup = hands + hands
-        zipData = zip(posLookup[pos:pos+4], handLookup[pos:pos+4], self.ui.handWIDGETS, self.ui.scoreAreaWIDGETS)
-        for pos, hand, handWIDGET, scoreAreaWIDGET in zipData:
-                
-            #set HandWIDGET 
-            handWIDGET.position = pos
-                
-            #set ScoreWIDGET
-            scoreAreaWIDGET.position = pos
-            scoreAreaWIDGET.nameText = hand.getName()
-
-    def finalizePass(self, hand, sentCards, receivedCards):
-        handWIDGET = self._getHandWIDGET(hand)
-        handWIDGET.cardWIDGETS = self._buildCardWIDGETS(hand)
-        
-        receivedWIDGETS = [cardWIDGET for cardWIDGET in handWIDGET.cardWIDGETS if cardWIDGET.card in receivedCards]
-        for cardWIDGET in receivedWIDGETS:
-            cardWIDGET.highlighted = True
-    
-    def finalizeRound(self):
-        for hand in self.gameMaster.hands:
-            scoreAreaWIDGET = self._getScoreAreaWIDGET(hand)
-            scoreAreaWIDGET.scoreText = self._getScoreText(hand)
-    
-    def finalizeTrick(self, winner):
-        
-        #Trigger trickwinner automation
-        self._animateTrickWinner(winner)
-    
-        for hand, scoreAreaWIDGET, handWIDGET in zip(self.gameMaster.hands, self.ui.scoreAreaWIDGETS, self.ui.handWIDGETS):
-
-            #Update score 
-            scoreAreaWIDGET.scoreText = self._getScoreText(hand)
-
-            #Update background color for winner
-            if hand == winner:
-                handWIDGET.currentTurn = True
-        
-        #Clear the board
-        self.ui.boardWIDGET.clearCards()
-        
-    def initializeRound(self):
-        for hand in self.gameMaster.hands:
-            handWIDGET = self._getHandWIDGET(hand)
-            handWIDGET.cardWIDGETS = self._buildCardWIDGETS(hand)
-                
-    def initializeTrick(self, nextHand):
-        self.ui.boardWIDGET.setPlayOrder(self._getSeatOrder(nextHand))
-
-        scoreAreaWIDGET = self._getScoreAreaWIDGET(nextHand)
-        scoreAreaWIDGET.currentTurn = True
-
-    def lockCardPass(self, hand):
-        handWIDGET = self._getHandWIDGET(hand)
-        handWIDGET.redraw()
-        
-        selectedCardWIDGETS = [cardWIDGET for cardWIDGET in handWIDGET.cardWIDGETS if cardWIDGET.selected]
-        for selectedCardWIDGET in selectedCardWIDGETS:
-            selectedCardWIDGET.highlighted = True
-            
-    def playCard(self, hand, card, nextHand):
-        handWIDGET = self._getHandWIDGET(hand)
-        cardWIDGET = self._getCardWIDGET(handWIDGET, card)
-
-        #Trigger playcard animation - provide from and to
-        self._animatePlayCard(handWIDGET, cardWIDGET)
-
-        #Rebuild hand
-        handWIDGET.cardWIDGETS = self._buildCardWIDGETS(hand)
-
-        #Add card to board - new card is invisible until animation completes
-        cardWIDGET = CardWIDGET(card, card.suit+card.value+'.png', visible=False)
-        self.ui.boardWIDGET.cardWIDGETS.append(cardWIDGET)
-
-        #Score Area - update turn from played card
-        scoreAreaWIDGET = self._getScoreAreaWIDGET(hand)
-        scoreAreaWIDGET.currentTurn = False
-
-        #Score Area - update turn from currentTurn
-        if nextHand is not None:
-            scoreAreaWIDGET = self._getScoreAreaWIDGET(nextHand)
-            scoreAreaWIDGET.currentTurn = True
-            
-    def processHandRequest(self, position):
-        if position >= 0:
-            self.currentHandPosition=position
-    
-    def processUserEvent(self):
-        self.ui.notificationAreaWIDGET.clearMessage()
-
-    def processUserInputError(self, message):
-        self.ui.notificationAreaWIDGET.setMessage(message)
-        
-    def selectCard(self, hand, card, replacedCard):
-        handWIDGET = self._getHandWIDGET(hand)
-        handWIDGET.redraw()
-
-        cardWIDGET = self._getCardWIDGET(handWIDGET, card)
-        cardWIDGET.selected = not cardWIDGET.selected
-        
-        if replacedCard is not None:
-            replacedCardWIDGET = self._getCardWIDGET(handWIDGET, replacedCard)
-            replacedCardWIDGET.selected = False
-                 
-    def _getCardWIDGET(self, handWIDGET, card):
-        for cardWIDGET in handWIDGET.cardWIDGETS:
-            if cardWIDGET.card == card:
-                return cardWIDGET
-        return None
-        
-    def _animatePlayCard(self, handWIDGET, cardWIDGET):        
-
-        startRect = cardWIDGET.rect
-        boardRect = self.ui.boardWIDGET._getCardRect(handWIDGET.seatLabel)
-        endRect = get_absolute_rect(boardRect, RECT_LOOKUP[('TopLevel','Board')])
-        moveSpeed = 40
-        redrawWIDGETS = [handWIDGET, self.ui.boardWIDGET, self.ui.notificationAreaWIDGET]
-        self.ui.animations.append(Animation('PlayCard', cardWIDGET.image, moveSpeed, startRect, endRect, redrawWIDGETS))
-    
-    def _animateTrickWinner(self, winner):
-        handWIDGET = self._getHandWIDGET(winner)
-        cardWIDGET = self.ui.boardWIDGET._getCard(handWIDGET.seatLabel)
-        scoreAreaWIDGET = self._getScoreAreaWIDGET(winner)
-
-        startRect, endRect = self._getTrickWinnerAnimationRects(handWIDGET.seatLabel)
-        moveSpeed = 40
-        redrawWIDGETS = [handWIDGET, scoreAreaWIDGET, self.ui.notificationAreaWIDGET]
-        self.ui.animations.append(Animation('TrickWinner', cardWIDGET.image, moveSpeed, startRect, endRect, redrawWIDGETS))
-
-    def _buildCardWIDGETS(self, hand):
-        handWIDGET = self._getHandWIDGET(hand)
-        
-        cardWIDGETS = pygame.sprite.LayeredUpdates()
-        for card in hand:
-            cardWIDGET = CardWIDGET(card, card.suit+card.value+'.png', rotation=handWIDGET.rotation)
-            cardWIDGETS.add(cardWIDGET)
-            
-        return cardWIDGETS
-
-    def _getHandWIDGET(self, hand):
-        idx = self.gameMaster.hands.index(hand)
-        for handWIDGET in self.ui.handWIDGETS:
-            if handWIDGET.position == idx:
-                return handWIDGET
-
-    def _getScoreAreaWIDGET(self, hand):
-        idx = self.gameMaster.hands.index(hand)
-        for scoreAreaWIDGET in self.ui.scoreAreaWIDGETS:
-            if scoreAreaWIDGET.position == idx:
-                return scoreAreaWIDGET
-
-    def _getScoreText(self, hand):
-        return 'Score: %d (%d)' % (hand.score.gameScore, hand.score.roundScore)
-
-    def _getSeatOrder(self, hand):
-        idx = self.gameMaster.hands.index(hand)
-        lookup = self.seatLabels + self.seatLabels
-        return lookup[idx:idx+4]
-
-    def _getTrickWinnerAnimationRects(self, seatLabel):
-        topLevelRect = RECT_LOOKUP[('TopLevel', 'TopLevel')]
-        cardWidth = SCR_ATTR['cardWidth']
-        cardHeight = SCR_ATTR['cardHeight']
-        x = topLevelRect.width/2 - cardWidth/2
-        y = topLevelRect.height/2 - cardHeight/2
-        startRect = Rect(x, y, cardWidth, cardHeight)
-        
-        if seatLabel == 'Top':
-            y = 0
-        elif seatLabel == 'Bottom':
-            y = topLevelRect.bottom - cardHeight
-        elif seatLabel == 'Left':
-            x = 0
-        elif seatLabel == 'Right':
-            x = topLevelRect.right - cardWidth
-        endRect = Rect(x, y, cardWidth, cardHeight)
-
-        return startRect, endRect
-
-    def _mapSeatAssignment(self, hands):
-        
-        seatAssignment = {}
-        for hand,seatLabel in zip(hands, self.seatLabels):
-            seatAssignment[hand.getName()] = seatLabel
-        return seatAssignment
 
 
 
@@ -1025,19 +758,27 @@ def main():
     players = ['Player1', 'Player2', 'Player3', 'Player4']
     evManager = EventManager()
     hearts = Hearts(players, evManager)
-    gui = Gui('Al')
-    uiController = UIGameController(hearts, gui, evManager)
-    gameController = GameController(hearts, gui,evManager)
+    player = Player('Al')
+    position = hearts.requestHand(player)
+    player.position = position
+    gui = Gui(player)
+    
+    gameController = GameController(hearts, gui, evManager)
+    hearts.startGame()
     gui.draw()
     
     # Prepare Game Objects
     clock = pygame.time.Clock()
+
+    x = threading.Thread(target=evManager.processEvents)
+    x.start()
     
     # Main Loop
     going = True
     while going:
         clock.tick(30)
-        going = uiController.processGUIEvents(pygame.event.get())
+#        evManager.processEvents()
+        going = gameController.processGUIEvents(pygame.event.get())
         gui.draw()
 
     pygame.quit()
