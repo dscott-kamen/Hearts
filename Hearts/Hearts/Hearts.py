@@ -12,6 +12,8 @@ class Hearts(Game):
     '''
     classdocs
     '''
+    GAMESTATUS_PASSCARDS = 100
+    
     def __init__(self, players, evManager):
         self.numPlayers = 4
         self.numTeams = 4
@@ -33,7 +35,7 @@ class Hearts(Game):
             Game.notify(self, event)
 
     def autoPlay(self):
-        if self.gameStatus == 'PassCards':
+        if self.gameStatus == self.GAMESTATUS_PASSCARDS:
             for hand in self.hands:
                 if isinstance(hand.player, ComputerPlayer) and hand.passStatus == 'Initiated':
                     while 1:
@@ -72,19 +74,19 @@ class Hearts(Game):
         hand.selectedCards.clear()
         Game.postDealInitialization(self)
 
-    def getNextPassType(self):
+    def _getNextPassType(self):
         lookup = self.passTypes + self.passTypes
         idx = lookup.index(self.currentRoundPassType)
         return lookup[idx+1]
 
-    def getPassFromHand(self, hand):
+    def _getPassFromHand(self, hand):
         lookup = self.hands + self.hands
         idx = lookup.index(hand)
         offset = self.passFromOffset[self.currentRoundPassType]
         return lookup[idx+offset]        
         
     def getPlayableCards(self, hand):
-        if self.gameStatus == 'PassCards':
+        if self.gameStatus == self.GAMESTATUS_PASSCARDS:
             return hand.cards
         else:
             return Game.getPlayableCards(self, hand)
@@ -100,7 +102,7 @@ class Hearts(Game):
             
             #Send passedCard to each user
             for hand in self.hands:
-                fromPlayer = self.getPassFromHand(hand)
+                fromPlayer = self._getPassFromHand(hand)
                 hand.setReceivedCards(fromPlayer.getPassedCards())
                 for removedCard, addedCard in zip(hand.passedCards, fromPlayer.passedCards):
                     hand.cards.remove(removedCard)
@@ -113,7 +115,7 @@ class Hearts(Game):
                 if isinstance(hand.player, ComputerPlayer):
                     hand.passStatus = 'Complete'
             self.evManager.post(GameUpdateEvent(self._copyGame()))
-            self.gameStatus = 'AwaitingPlay'
+            self.gameStatus = self.GAMESTATUS_PLAYCARDS
             for hand in self.hands:
                 hand.selectedCards.clear()
             self.evManager.post(GameUpdateEvent(self._copyGame()))
@@ -121,7 +123,7 @@ class Hearts(Game):
             self.autoPlay()
 
     def playCard(self, hand, cards):
-        if self.gameStatus == 'PassCards':
+        if self.gameStatus == self.GAMESTATUS_PASSCARDS:
 
             if len(cards) != 3:
                 self.evManager.post(UserInputErrorEvent('Incorrect number of cards provided'))
@@ -139,7 +141,7 @@ class Hearts(Game):
         if self.isPassComplete:
             Game.postDealInitialization(self)
         else:
-            self.gameStatus = 'PassCards'
+            self.gameStatus = self.GAMESTATUS_PASSCARDS
             self.autoPlay()
  
     def postPlayProcessing(self, hand, card):
@@ -153,7 +155,7 @@ class Hearts(Game):
         self.heartsBroken = False
         
         # Initialized pass cards
-        self.currentRoundPassType = self.getNextPassType()
+        self.currentRoundPassType = self._getNextPassType()
         if self.currentRoundPassType == 'Keeper':
             self.isPassComplete = True
             for hand in self.hands:
@@ -173,7 +175,7 @@ class Hearts(Game):
         return winner
     
     def selectCard(self, hand, card):
-        if self.gameStatus == 'PassCards':
+        if self.gameStatus == self.GAMESTATUS_PASSCARDS:
             #Once you've accepted pass complete, can't try to pass more cards
             if hand.passStatus == 'Submitted':
                 return
@@ -195,17 +197,6 @@ class Hearts(Game):
                 self.setPlayOrder(hand)
                 break
  
-#     def submitHandPassCards(self, hand, cards):
-#         if len(cards) != 3:
-#                 self.evManager.post(UserInputErrorEvent('Incorrect number of cards provided'))
-#                 return
-#             
-#         hand.passStatus = 'Submitted' 
-#         hand.setPassedCards(cards)
-#         self.evManager.post(CardPlayedEvent(hand, cards, self._copyGame()))
-#         
-#         self.passCards()
-    
     def updateGameScore(self):
         for hand in self.hands:
             hand.score.gameScore += hand.score.roundScore

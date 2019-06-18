@@ -17,6 +17,9 @@ class InvalidCardException(Exception):
 
 class Game():
     
+    GAMESTATUS_NONE = 0
+    GAMESTATUS_PLAYCARDS = 1
+    GAMESTATUS_SCORINGTRICK = 2
     MAXSCORE = 500
     
     def __init__(self, players, evManager):
@@ -26,7 +29,7 @@ class Game():
         self.teams = []
         self.board = Board()
         self.dealer = -1
-        self.gameStatus = ''
+        self.gameStatus = self.GAMESTATUS_NONE
         self.initializeGame(players)
 
     def notify(self, event):
@@ -42,12 +45,6 @@ class Game():
         elif isinstance(event, GameUpdateRequestEvent):
             self.getGameInfo()
             
-#        elif isinstance(event, TrickAcceptanceRequestEvent):
-#            self.processTrick()
-            
-#        elif isinstance(event, HandRequestEvent):
-#            self.processHandRequest(event.playerName, event.position)
-
     def autoPlay(self):
         currentHand = self.getTurn()
         if currentHand is not None and isinstance(currentHand.player, ComputerPlayer):
@@ -72,7 +69,7 @@ class Game():
     def finalizeGame(self):
         pass
 
-    def getFirstPlayer(self):
+    def getLeadHand(self):
         lookup = self.hands + self.hands
         dealIndex = lookup.index(self.dealer)
         return lookup[dealIndex+1]
@@ -101,7 +98,7 @@ class Game():
         
         return playableCards
 
-    def getPlayers(self, numPlayers, numTeams=None):
+    def _getPlayers(self, numPlayers, numTeams=None):
         
         if numTeams == None:
             numTeams = numPlayers
@@ -135,7 +132,7 @@ class Game():
             self.finalizeGame()
         else:
             self.setDealer()
-            self.setPlayOrder(self.getFirstPlayer())
+            self.setPlayOrder(self.getLeadHand())
             self.preDealInitialization()
             
             self.deal()            
@@ -148,7 +145,7 @@ class Game():
         else:
             if winner is not None:
                 self.setPlayOrder(winner)
-            self.gameStatus = 'AwaitingPlay'
+            self.gameStatus = self.GAMESTATUS_PLAYCARDS
             self.evManager.post(GameUpdateEvent(self._copyGame()))
             self.autoPlay()
     
@@ -158,7 +155,7 @@ class Game():
             self.numTeams = self.numPlayers
         
         if not players:
-            players = self.getPlayers(self.numPlayers, self.numTeams)
+            players = self._getPlayers(self.numPlayers, self.numTeams)
             
         #Set teams and hands
         for i, player in enumerate(players):
@@ -229,7 +226,7 @@ class Game():
                 self.updateRoundScoreWithEndRoundAdjustments()
                 self.updateGameScore()
 
-            self.gameStatus = 'Scoring Trick'
+            self.gameStatus = self.GAMESTATUS_SCORINGTRICK
             self.evManager.post(TrickCompleteEvent(winner, self._copyGame()))
 
             self.board.cards.clear()
@@ -252,12 +249,10 @@ class Game():
             
             
         if found:
-#            self.evManager.post(HandRequestResponseEvent(position, self))
             if len([hand.occupied for hand in self.hands if hand.occupied]) == 4:
                 self.startGame()
         else:
             position = -1
-#            self.evManager.post(HandRequestResponseEvent(position))
                     
         return position
         
@@ -313,69 +308,71 @@ class Game():
 class Hand():
     
     def __init__(self, name=None, score=None, inputString=None, position=None):
-        self.cards = []
-        if inputString != None: self.addCardsFromString(inputString)
-        self.name = str(name)
-        self.occupied = False
-        self.player = None
-        self.selectedCards = []
-        self.position = position
+        self._cards = []
+        if inputString != None: self._addCardsFromString(inputString)
+        self._name = str(name)
+        self._occupied = False
+        self._player = None
+        self._selectedCards = []
+        self._position = position
         
         if score == None:
             self.score = Score()
         else:
             self.score =  score
+
+
+    @property
+    def cards(self): return self._cards
+    @property
+    def name(self):
+        if self.player is None or isinstance(self, ComputerPlayer):
+            return self.name
+        else:
+            return self.player.name
+        
+    @property
+    def occupied(self): return self._occupied
+    @property
+    def player(self): return self._player
+    @property
+    def position(self): return self._position
+    @property
+    def selectedCards(self): return self._selectedCards
+    
+    @cards.setter
+    def cards(self, cards):
+        self._cards = cards
+        
+    @name.setter
+    def name(self, name):
+        self._name = name
+            
+    @occupied.setter
+    def occupied(self, flag):
+        self._occupied = flag
+        
+    @position.setter
+    def position(self, position):
+        self._position = position
+
+    @player.setter
+    def player(self, player):
+        self._player = player
+    
+    @selectedCards.setter
+    def selectedCards(self, cards):
+        return self._selectedCards
         
     def addCard(self, card):
         self.cards.append(card)
     
-    def addCardsFromString(self, inputString):
+    def _addCardsFromString(self, inputString):
         for item in inputString.split():
             self.cards.append(Card.createCardFromString(item))
     
-    def getName(self):
-        return self.name
-
     def getCards(self, playableCards, numCards):
         pass
-#     def getCards(self, playableCards, numCards, promptMessage):
-#         
-#         while 1:
-#             usrInput = input(promptMessage).upper().split()
-#    
-#             if len(usrInput) != numCards:
-#                 print('Wrong number of cards provided.  Please re-enter.')
-#                 continue
-#             
-#             cards = []
-#             validInput = True
-#             while validInput:
-#                 for token in usrInput: 
-#                 
-#                     #Convert input into a card
-#                     try:
-#                         card = Card(token[0], token[1])
-#                         if not self.hasCard(card):
-#                             print('%s, %s%s is not in your hand.  Please re-enter.\n' % (self.getName(), card.getValue(), card.getSuit()))
-#                             validInput = False
-#                             return None
-#                             break
-#                     except:
-#                         validInput = False
-#                         print('%s, %s is not a valid card. Please re-enter.\n' % (self.getName(), usrInput))
-#                         return None
-#                         break
-# 
-#                     if card not in playableCards:
-#                         print('%s, %s%s is not a valid play.  Please re-enter.\n' % (self.getName(), card.getValue(), card.getSuit()))
-#                         validInput = False
-#                         break
-#                     
-#                     cards.append(card) 
-#                        
-#                 break
-# 
-#             return cards
         
     def hasSuit(self, suit):
         return len([card for card in self.card if card.suit == suit]) > 0
@@ -429,7 +426,7 @@ class ComputerPlayer(Player):
     def randomCardSelector(self, playableCards, numCards):
         return random.sample(playableCards, numCards)
     
-class Board():
+class Board(Hand):
     def __init__(self, name=None, inputString=None):
         Hand.__init__(self, name, inputString)
         self.cardSource = {}
@@ -453,7 +450,7 @@ class Deck:
                 self.cards.append(Card(value, suit))
         
     def deal(self, players, numCards=-1):
-        print(players[-1].getName() + ' is the dealer.')
+        print(players[-1].name + ' is the dealer.')
         random.shuffle(self.cards)
 
         #If number of cards not provided, deal all cards

@@ -70,7 +70,7 @@ class Spades(Game):
         return card
     
     def postDealInitialization(self):
-        self.tricksBid = self.getBids(self.getPlayOrder(self.getFirstPlayer()))
+        self.tricksBid = self.getBids(self.getPlayOrder(self.getLeadHand()))
                  
     def preDealInitialization(self):
         self.tricksWon = [0 for hand in self.hands]
