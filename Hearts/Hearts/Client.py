@@ -1,6 +1,6 @@
 import os, pygame
 from Hearts import *
-from GameController import *
+from HeartsGameController import *
 from resource import *
 #from Game import Player
 import threading
@@ -755,7 +755,8 @@ def main():
     player.position = position
     gui = Gui(player)
     
-    gameController = GameController(hearts, gui, evManager)
+#    gameController = GameController(hearts, gui, evManager)
+    gameController = HeartsGameController(hearts, gui, evManager)
     hearts.startGame()
     gui.draw()
     

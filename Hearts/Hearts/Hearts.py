@@ -18,26 +18,26 @@ class Hearts(Game):
         self.numPlayers = 4
         self.numTeams = 4
         self.maxScore = 100
-        self.isPassComplete = False
+        self.passComplete = False
         self.passTypes = ['Left', 'Right', 'Across','Keeper']
         self.passFromOffset = {'Left':3, 'Right':1, 'Across':2, 'Keeper':0}
         self.currentRoundPassType = 'Keeper'
         Game.__init__(self, players, evManager)
     
     
-    def notify(self, event):
-        
-        if isinstance(event, PassCompleteAcceptanceRequestEvent):
-            hand = self.hands[event.handPosition]
-            self.finalizePass(hand)
-            
-        else:
-            Game.notify(self, event)
+#     def notify(self, event):
+#         
+#         if isinstance(event, PassCompleteAcceptanceRequestEvent):
+#             hand = self.hands[event.handPosition]
+#             self.finalizePass(hand)
+#             
+#         else:
+#             Game.notify(self, event)
 
     def autoPlay(self):
         if self.gameStatus == self.GAMESTATUS_PASSCARDS:
             for hand in self.hands:
-                if isinstance(hand.player, ComputerPlayer) and hand.passStatus == 'Initiated':
+                if isinstance(hand.player, ComputerPlayer) and not hand.passSubmitted:
                     while 1:
                         try:
                             cards = hand.player.autoPlayCard(hand, hand.cards, 3)
@@ -70,7 +70,6 @@ class Hearts(Game):
         return max([(card.getRank(), hand) for card, hand in zip(self.board.cards, playOrder) if card.suit == suit])[1]
 
     def finalizePass(self, hand):
-        hand.passStatus = 'Complete'
         hand.selectedCards.clear()
         Game.postDealInitialization(self)
 
@@ -98,7 +97,7 @@ class Hearts(Game):
         return len(self.board.cards) == 0
 
     def passCards(self):
-        if len([hand for hand in self.hands if hand.passStatus == 'Submitted']) == 4:
+        if len([hand for hand in self.hands if hand.passSubmitted]) == 4:
             
             #Send passedCard to each user
             for hand in self.hands:
@@ -110,10 +109,7 @@ class Hearts(Game):
                 hand.sortHand()
             #Update post pass data
             self.set2ClubPlayOrder()
-            self.isPassComplete = True
-            for hand in self.hands:
-                if isinstance(hand.player, ComputerPlayer):
-                    hand.passStatus = 'Complete'
+            self.passComplete = True
             self.evManager.post(GameUpdateEvent(self._copyGame()))
             self.gameStatus = self.GAMESTATUS_PLAYCARDS
             for hand in self.hands:
@@ -130,7 +126,7 @@ class Hearts(Game):
                 return 
             
             hand.setPassedCards(cards)
-            hand.passStatus = 'Submitted'
+            hand.passSubmitted = True
             self.evManager.post(CardPlayedEvent(hand, cards, self._copyGame()))        
             self.passCards()
         else:
@@ -138,7 +134,7 @@ class Hearts(Game):
 
     def postDealInitialization(self):
         self.set2ClubPlayOrder()
-        if self.isPassComplete:
+        if self.passComplete:
             Game.postDealInitialization(self)
         else:
             self.gameStatus = self.GAMESTATUS_PASSCARDS
@@ -157,13 +153,11 @@ class Hearts(Game):
         # Initialized pass cards
         self.currentRoundPassType = self._getNextPassType()
         if self.currentRoundPassType == 'Keeper':
-            self.isPassComplete = True
-            for hand in self.hands:
-                self.passStatus = 'Complete'
+            self.passComplete = True
         else:
-            self.isPassComplete = False
+            self.passComplete = False
             for hand in self.hands:
-                hand.passStatus = 'Initiated'            
+                hand.passSubmitted = False            
         for hand in self.hands:
             hand.passedCards.clear()
             hand.receivedCards.clear()        
@@ -177,7 +171,7 @@ class Hearts(Game):
     def selectCard(self, hand, card):
         if self.gameStatus == self.GAMESTATUS_PASSCARDS:
             #Once you've accepted pass complete, can't try to pass more cards
-            if hand.passStatus == 'Submitted':
+            if hand.passSubmitted:
                 return
             
             replacedCard = None
@@ -242,7 +236,7 @@ class HeartsHand(Hand):
     def __init__(self, name, score=None, inputString=None, position=None):
         Hand.__init__(self, name, score, inputString, position)
 
-        self.passStatus = ''
+        self.passSubmitted = False
         self.passedCards = []
         self.receivedCards = []
 
