@@ -112,9 +112,13 @@ class Hearts(Game):
             for hand in self.hands:
                 if isinstance(hand.player, ComputerPlayer):
                     hand.passStatus = 'Complete'
-            self.gameStatus = 'AwatingPlay'
-
-            self.evManager.post(PassCompleteEvent(self))
+            self.evManager.post(GameUpdateEvent(self._copyGame()))
+            self.gameStatus = 'AwaitingPlay'
+            for hand in self.hands:
+                hand.selectedCards.clear()
+            self.evManager.post(GameUpdateEvent(self._copyGame()))
+            
+            self.autoPlay()
 
     def playCard(self, hand, cards):
         if self.gameStatus == 'PassCards':
@@ -125,7 +129,7 @@ class Hearts(Game):
             
             hand.setPassedCards(cards)
             hand.passStatus = 'Submitted'
-            self.evManager.post(CardPlayedEvent(hand, cards, self))        
+            self.evManager.post(CardPlayedEvent(hand, cards, self._copyGame()))        
             self.passCards()
         else:
             Game.playCard(self, hand, cards)
@@ -151,11 +155,11 @@ class Hearts(Game):
         # Initialized pass cards
         self.currentRoundPassType = self.getNextPassType()
         if self.currentRoundPassType == 'Keeper':
-            self.passComplete = True
+            self.isPassComplete = True
             for hand in self.hands:
                 self.passStatus = 'Complete'
         else:
-            self.passComplete = True
+            self.isPassComplete = False
             for hand in self.hands:
                 hand.passStatus = 'Initiated'            
         for hand in self.hands:
@@ -191,16 +195,16 @@ class Hearts(Game):
                 self.setPlayOrder(hand)
                 break
  
-    def submitHandPassCards(self, hand, cards):
-        if len(cards) != 3:
-                self.evManager.post(UserInputErrorEvent('Incorrect number of cards provided'))
-                return
-            
-        hand.passStatus = 'Submitted' 
-        hand.setPassedCards(cards)
-        self.evManager.post(CardPlayedEvent(hand, cards, self))
-        
-        self.passCards()
+#     def submitHandPassCards(self, hand, cards):
+#         if len(cards) != 3:
+#                 self.evManager.post(UserInputErrorEvent('Incorrect number of cards provided'))
+#                 return
+#             
+#         hand.passStatus = 'Submitted' 
+#         hand.setPassedCards(cards)
+#         self.evManager.post(CardPlayedEvent(hand, cards, self._copyGame()))
+#         
+#         self.passCards()
     
     def updateGameScore(self):
         for hand in self.hands:
@@ -228,10 +232,10 @@ class Hearts(Game):
         if self.isFirstTrick(hand) and (card.suit == 'H' or (card.suit == 'S' and card.value == 'Q')):
             raise InvalidCardException('Cannot draw blood on first trick')
         
-        if self.isFirstTrick(hand):
+        if self.isFirstPlay():
             heartsCount = len([card for card in hand.cards if card.suit == 'H'])
             handCount = len(hand.cards)
-            if self.heartsBroken and handCount > heartsCount and card.suit == 'H':
+            if not self.heartsBroken and handCount > heartsCount and card.suit == 'H':
                 raise InvalidCardException('Hearts not broken')
         
         if not self.isFirstPlay():

@@ -87,12 +87,6 @@ class CardPlayedEvent(Event):
         self.cards = cards
         self.game = game
          
-class PassCompleteEvent(Event):
-    def __init__(self, game):
-        Event.__init__(self)
-        self.name = 'Pass Complete'
-        self.game = game
-
 class TrickCompleteEvent(Event):
     def __init__(self, winner, game):
         Event.__init__(self)
@@ -107,17 +101,22 @@ class EventManager():
         self.eventHistory = []
         self._locked = False
         self._lockKey = None
+        self._quit = False
         
     
     def lock(self, lockKey):
         if not self._locked:
             self._locked = True
             self._lockKey = lockKey
-        
+
     def unlock(self, lockKey):
         if self._locked and self._lockKey == lockKey:
             self._locked = False
             self._lockKey = None
+    
+    def shutdown(self):
+        self._quit = True
+        
     
     def registerListener(self, listener):
         if listener not in self.listeners:
@@ -128,6 +127,9 @@ class EventManager():
     
     def processEvents(self):
         while 1:
+            if self._quit:
+                break
+            
             if len(self.eventQueue) > 0 and not self._locked:
                 start = time.time()
                 event = self.eventQueue[0]
@@ -179,8 +181,8 @@ class GameController():
 
         self.seatLabels = ['Bottom', 'Left', 'Top', 'Right']
         self.rotation = [0, -90, 0, 90]
-#        self.posAdjustedHands = []
 
+        self.ui.notificationAreaWIDGET.setMessage("Retrieving game info...")
         self.getGameUpdate()
             
     def notify(self, event):
@@ -242,8 +244,14 @@ class GameController():
     def updateGame(self, game):
         if self.ui.currentPosition < 0:
             self._initializePosition(game) 
+            self.ui.notificationAreaWIDGET.setMessage('')
         
         self.game = game
+        
+        #if this is a pass complete update, lock event processing until pass acknowledged
+        if self.game.gameStatus == 'PassCards' and self.game.isPassComplete:
+            self.evManager.lock('PassCards')
+            
         self._buildWIDGETS()
         self.ui.redraw()
         
@@ -251,11 +259,17 @@ class GameController():
         
         if self.ui.gameInitialized:
             self.evManager.lock("playCard")
-            print("Played Card Rect:", cardWIDGET.rect)
-            startRect = cardWIDGET.rect
+            
+            #get start rect
+            if handWIDGET.seatLabel == 'Bottom':
+                startRect = cardWIDGET.rect
+            else:
+                rect = RECT_LOOKUP[('TopLevel', ('Hand', handWIDGET.seatLabel))]
+                startRect = cardWIDGET.image.get_rect(center=rect.center)
+                
             boardRect = self.ui.boardWIDGET._getCardRect(handWIDGET.seatLabel)
             endRect = get_absolute_rect(boardRect, RECT_LOOKUP[('TopLevel','Board')])
-            moveSpeed = 5
+            moveSpeed = 25
             redrawWIDGETS = [handWIDGET, self.ui.boardWIDGET, self.ui.notificationAreaWIDGET]
             self.ui.animations.append(Animation('PlayCard', cardWIDGET.image, moveSpeed, startRect, endRect, redrawWIDGETS, self._animatePlayCardCallback))
 
@@ -263,7 +277,8 @@ class GameController():
         for cardWIDGET in self.ui.boardWIDGET.cardWIDGETS:
             cardWIDGET.visible = True
         self.ui.boardWIDGET.redraw()
-        self.evManager.unlock("playCard")
+        if len(self.game.board.cards) < 4:
+            self.evManager.unlock("playCard")
 
     def _animateTrickWinner(self, winner):
         if self.ui.gameInitialized:
@@ -282,19 +297,18 @@ class GameController():
             widget.redraw()
         self.evManager.unlock("trickWinner")
 
-    def _applyPassLock(self, hand, cardWIDGETS):
-        if self.game.gameStatus == 'PassCards':
+    def _applyPassLock(self, hand, handWIDGET, cardWIDGETS):
+        if self.game.gameStatus == 'PassCards' and handWIDGET.seatLabel == 'Bottom':
             for cardWIDGET in cardWIDGETS:
                 if cardWIDGET.card in hand.passedCards:
                     cardWIDGET.highlighted = True
+                    cardWIDGET.selected = True
 
-    def _applyPassComplete(self, hand, cardWIDGETS):
-        if self.game.isPassComplete and hand.passStatus == 'Submitted':
+    def _applyPassComplete(self, hand, handWIDGET, cardWIDGETS):
+        if self.game.gameStatus == 'PassCards' and self.game.isPassComplete and handWIDGET.seatLabel == 'Bottom':
             for cardWIDGET in cardWIDGETS:
                 if cardWIDGET.card in hand.receivedCards:
                     cardWIDGET.highlighted = True
-                    cardWIDGET.selected = True
-            
 
     def _applySelectCards(self, hand, cardWIDGETS):
         for cardWIDGET in cardWIDGETS:
@@ -332,8 +346,8 @@ class GameController():
             cardWIDGETS.add(cardWIDGET)
 
         self._applySelectCards(hand, cardWIDGETS)        
-        self._applyPassLock(hand, cardWIDGETS)
-        self._applyPassComplete(hand, cardWIDGETS)
+        self._applyPassLock(hand, handWIDGET, cardWIDGETS)
+        self._applyPassComplete(hand, handWIDGET, cardWIDGETS)
         
         return cardWIDGETS
 
@@ -343,11 +357,12 @@ class GameController():
 
     def _buildScoreArea(self, hand):
         scoreAreaWIDGET = self._getScoreAreaWIDGET(hand)
+        currentHand = self.game.getTurn()
         
-        if self.game.gameStatus != 'AwaitingPlay' or self.game.getTurn() != hand:
-            scoreAreaWIDGET.colorLabel = 'scoreAreaColor'
-        else:
+        if self.game.gameStatus == 'AwaitingPlay' and currentHand is not None and currentHand.position == hand.position:
             scoreAreaWIDGET.colorLabel = 'scoreAreaCurrentTurnColor'
+        else:
+            scoreAreaWIDGET.colorLabel = 'scoreAreaColor'
         
         if hand.player is not None:
             scoreAreaWIDGET.nameText = hand.player.name
@@ -355,7 +370,6 @@ class GameController():
 
     def _buildWIDGETS(self):
         if self.ui.gameInitialized:
-#            for hand in self.posAdjustedHands:
             for hand in self.game.hands:
                 self._buildHandArea(hand)
                 self._buildScoreArea(hand)
@@ -368,14 +382,9 @@ class GameController():
                 return cardWIDGET
         return None
         
-#     def _getHands(self):
-#         return self.game.hands
-#        return self.posAdjustedHands
-    
     def _getHand(self, handWIDGET):
         idx = self.seatLabels.index(handWIDGET.seatLabel)
         return self.game.hands[(idx + self.ui.currentPosition)%4]
-#        return self.posAdjustedHands[(idx + self.ui.currentPosition)%4]
     
     def _getHandWIDGET(self, hand):
         idx = (hand.position - self.ui.currentPosition + 4)%4 
@@ -420,10 +429,6 @@ class GameController():
             if hand.player is not None and hand.player.name == self.ui.player.name:
                 self.ui.currentPosition = i
                 break
-
-        #create posAdjustedHand
-#         lookup = game.hands + game.hands
-#         self.posAdjustedHands = lookup[self.ui.currentPosition:self.ui.currentPosition+4]
         self.ui.gameInitialized = True 
     
     def processGUIEvents(self, events):
@@ -432,7 +437,7 @@ class GameController():
 #            for event in pygame.event.get():
                  
             if event.type == QUIT:
-                self.evManager(QuitEvent())
+                return False
                  
             elif event.type == pygame.MOUSEBUTTONUP:
                 handWIDGET = self.ui.handWIDGETS[0]
@@ -440,11 +445,11 @@ class GameController():
                 pos = pygame.mouse.get_pos()
 
                 if self.game.gameStatus == 'AwaitingPlay':
-                    self.evManager.post(TrickAcceptanceRequestEvent())
+                    if len(self.game.board.cards) == 4:
+                        self.evManager.unlock("playCard")
 
-                if self.game.isPassComplete:
-                    if hand.passStatus == 'Submitted':                        
-                        self.evManager.post(PassCompleteAcceptanceRequestEvent(hand.position))
+                if self.game.isPassComplete and self.game.gameStatus == 'PassCards':
+                    self.evManager.unlock("PassCards")
                     
                 #See if any cards selected
                 selectedCards = handWIDGET.cardWIDGETS.get_sprites_at(pos)
@@ -461,7 +466,7 @@ class GameController():
                 if rect.collidepoint(pos):
                     if hand.selectedCards:
                         if ((self.game.gameStatus == 'PassCards' and hand.passStatus == 'Initiated') 
-                                or (self.game.gameStatus == 'AwaitingPlay' and hand.passStatus == 'Complete')):
+                                or (self.game.gameStatus == 'AwaitingPlay')):
                             ev = CardPlayRequestEvent(hand.position, hand.selectedCards)
                             self.evManager.post(ev)         
                                 

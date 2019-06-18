@@ -89,8 +89,6 @@ class CardWIDGET(pygame.sprite.Sprite):
     def cardLabel(self): return self._card
     @property        
     def highlighted(self): return self._highlighted    
-#    @property
-#    def position(self): return self._position    
     @property
     def rotation(self): return self._rotation    
     @property   
@@ -105,10 +103,6 @@ class CardWIDGET(pygame.sprite.Sprite):
         self._highlighted = flag
         if self.highlighted and self.showFront:
             self.image = self._applyColor(self.image)
-
-#    @position.setter
-#    def position(self, position):
-#        self._position = position
 
     @rotation.setter
     def rotation(self, value):
@@ -465,15 +459,13 @@ class Gui():
         self._handWIDGETS = []
         self._scoreAreaWIDGETS = []
         self.currentPosition = -1
-#        self.name = name
         self.player = player
-        self.defaultNames = [player.name, 'Player1', 'Player2', 'Player3']
         self.gameInitialized = False
 
         #Draw initial screen
         DataPrep()
         self._initialize()
-        DataPrep()._preloadCardImages()        
+        threading.Thread(target=DataPrep()._preloadCardImages)        
 
         
 
@@ -770,7 +762,7 @@ def main():
     # Prepare Game Objects
     clock = pygame.time.Clock()
 
-    x = threading.Thread(target=evManager.processEvents)
+    x = threading.Thread(name='EventManager', target=evManager.processEvents)
     x.start()
     
     # Main Loop
@@ -781,6 +773,7 @@ def main():
         going = gameController.processGUIEvents(pygame.event.get())
         gui.draw()
 
+    evManager.shutdown()
     pygame.quit()
 
 

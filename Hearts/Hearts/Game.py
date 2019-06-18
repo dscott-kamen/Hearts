@@ -42,8 +42,8 @@ class Game():
         elif isinstance(event, GameUpdateRequestEvent):
             self.getGameInfo()
             
-        elif isinstance(event, TrickAcceptanceRequestEvent):
-            self.processTrick()
+#        elif isinstance(event, TrickAcceptanceRequestEvent):
+#            self.processTrick()
             
 #        elif isinstance(event, HandRequestEvent):
 #            self.processHandRequest(event.playerName, event.position)
@@ -139,13 +139,13 @@ class Game():
             self.preDealInitialization()
             
             self.deal()            
+            self.evManager.post(GameUpdateEvent(self._copyGame()))
             self.postDealInitialization()
 
     def initializeTrick(self, winner=None):
         if self.isRoundComplete():
             self.initializeRound()
         else:
-            self.board.cards.clear()
             if winner is not None:
                 self.setPlayOrder(winner)
             self.gameStatus = 'AwaitingPlay'
@@ -203,6 +203,7 @@ class Game():
         hand.selectedCards.clear()
         self.postPlayProcessing(hand, card)
         self.evManager.post(CardPlayedEvent(hand, card, self._copyGame()))
+        self.processTrick()
         self.autoPlay()
                 
 
@@ -230,6 +231,8 @@ class Game():
 
             self.gameStatus = 'Scoring Trick'
             self.evManager.post(TrickCompleteEvent(winner, self._copyGame()))
+
+            self.board.cards.clear()
             self.initializeTrick(winner)
         
     def requestHand(self, player, position=None):
